@@ -1,0 +1,364 @@
+library(bnlearn)
+library(gRain)
+
+################################################################################
+# INSURANCE
+
+data("insurance")
+# description of variables: https://www.bnlearn.com/documentation/man/insurance.html
+
+# learn structure from data
+network <- hc(insurance)
+#
+nb.fit <- bn.fit(network, data = insurance)
+
+bn = nb.fit
+
+# compile Bayesian network into a junction tree representation
+bn_junction <- compile(as.grain(bn))
+
+evidence_set <- c("Accident", "RuggedAuto")
+evidence_states <- c("Mild", "Tank") 
+
+target_set <- c("Antilock", "OtherCar", "Airbag")
+
+#####-----
+
+# brute-force MAP/MPE
+evidence <- setEvidence(bn_junction, nodes = evidence_set, states = evidence_states)
+joint_distribution2 <- querygrain(evidence, nodes = target_set, type = 'joint')
+# save to data.frame
+joint_distribution2_df <- as.data.frame.table(joint_distribution2)
+joint_distribution2_df <- joint_distribution2_df %>%
+  arrange(desc(Freq))
+
+#####-----
+insurance_full <- mre_brute(target_set = target_set, 
+                            evidence_set = evidence_set, 
+                            evidence_states = evidence_states, 
+                            bn_grain = bn_junction)
+insurance_full
+
+insurance_fwd <- mre_fwd(target_set = target_set, 
+                         evidence_set = evidence_set, 
+                         evidence_states = evidence_states, 
+                         bn_grain = bn_junction)
+insurance_fwd
+
+################################################################################
+# SDP: EXAMPLE 1
+
+# create an empty graph
+structure <- empty.graph(c('D', 'H1', 'H2', 'H3', 'H4'))
+
+# define conditional probability tables
+# Pr(D)
+cpt_d <- matrix(c(0.5, 0.5), ncol = 2, dimnames = list(NULL, c('positive', 'negative')))
+
+# Pr(H1|D)
+cpt_h1 = matrix(c(0.55, 0.45, 0.45, 0.55), ncol = 2, dimnames = list("H1" = c("positive", "negative"),
+                                                                     "D" = c("positive", "negative")))
+
+# Pr(H2|D)
+cpt_h2 = matrix(c(0.55, 0.45, 0.45, 0.55), ncol = 2, 
+                dimnames = list("H2" = c("positive","negative"),
+                                "D" = c("positive", "negative")))
+
+# Pr(H3|D)
+cpt_h3 = matrix(c(0.60, 0.40, 0.4, 0.60), ncol = 2, 
+                dimnames = list("H3" = c("positive","negative"),
+                                "D" = c("positive", "negative")))
+
+# Pr(H4|D)
+cpt_h4 = matrix(c(0.65, 0.35, 0.35, 0.65), ncol = 2, 
+                dimnames = list("H4" = c("positive","negative"),
+                                "D" = c("positive", "negative")))
+
+
+# create arc set in the form of a matrix with two columns: 'from' and 'to'
+arcs(structure) <- matrix(c('D', 'H1',
+                            'D', 'H2',
+                            'D', 'H3',
+                            'D', 'H4'),
+                          ncol = 2, byrow = TRUE, dimnames = list(NULL, c('from', 'to')))
+
+# pass tables to custom.fit()
+cpt <- list(D = cpt_d, H1 = cpt_h1, H2 = cpt_h2, H3 = cpt_h3, H4 = cpt_h4)
+bn <- custom.fit(structure, cpt)
+
+# plot the network
+graphviz.plot(bn)
+
+# save as junction tree
+bn_junction <- compile(as.grain(bn))
+
+# scenario 1: H1 = +, H2 = +
+scenario1 <- setEvidence(bn_junction, nodes = c('H1', 'H2'), states = c('positive', 'positive'))
+querygrain(scenario1, nodes = 'D', type = 'joint')
+
+# define evidence scenarios
+states <- list(
+  H3 = c('positive', 'negative'),
+  H4 = c('positive', 'negative')
+)
+combinations <- expand.grid(states)
+combinations$H1 <- "positive"
+combinations$H2 <- "positive"
+
+evidence_scenarios <- combinations %>%
+  relocate(H1, H2, .before = everything())
+
+evidence_scenarios2 <- asplit(evidence_scenarios, 1)
+
+result_df <- data.frame(H1 = character(), H2 = character(),
+                        H3 = character(), H4 = character(),
+                        Probability_h = numeric(),
+                        Probability_D_Positive = numeric(),
+                        stringsAsFactors = FALSE)
+
+# query for P(h|e) 
+e_1 <- setEvidence(bn_junction, 
+                   nodes = c('H1', 'H2'), 
+                   states = c('positive','positive'))
+result_1 <- as.data.frame.table(querygrain(e_1, nodes = c('H3', 'H4'), type = "joint"))
+
+for (i in 1:nrow(evidence_scenarios)) {
+  
+  # set evidence for the current scenario
+  e_2 <- setEvidence(bn_junction,
+                     nodes = c('H1', 'H2', 'H3', 'H4'),
+                     states = as.character(evidence_scenarios2[[i]]))
+  
+  # perform query
+  result_2 <- querygrain(e_2, nodes = c('D'), type = 'joint')
+  
+  result_1_sub <- subset(result_1, H3 == evidence_scenarios2[[i]][3] & H4 == evidence_scenarios2[[i]][4])$Freq
+  
+  result_df <- rbind(result_df, c(as.character(evidence_scenarios2[[i]]), result_1_sub, result_2['positive']))
+  
+}
+
+colnames(result_df) <- c("H1", "H2", "H3", "H4",
+                         "Probability_h","Probability_D_Positive")
+
+# Set the threshold
+threshold <- 0.55  # Adjust the threshold as needed
+
+# Filter the data frame based on the threshold
+filtered_result <- subset(result_df, Probability_D_Positive >= threshold)
+
+# Calculate the sum of the selected values
+sum_of_probabilities <- sum(as.numeric(filtered_result$Probability_h))
+
+# Print or use the sum_of_probabilities as needed
+print(sum_of_probabilities)
+
+#####-----
+# suppose we observe H3 -- change state for experiment
+scenario_H3 <- setEvidence(bn_junction, nodes = c('H1', 'H2', 'H3'), states = c('positive', 'positive', 'positive')) # change state negative|positive
+querygrain(scenario_H3, nodes = c('D'), type = 'joint')
+
+states <- list(
+  H4 = c('positive', 'negative')
+)
+
+combinations <- expand.grid(states)
+combinations$H1 <- "positive"
+combinations$H2 <- "positive"
+combinations$H3 <- 'positive' # change state negative|positive
+
+evidence_scenarios <- combinations %>%
+  relocate(H1, H2, H3, .before = everything())
+
+evidence_scenarios2 <- asplit(evidence_scenarios, 1)
+
+result_df <- data.frame(H1 = character(), H2 = character(),
+                        H3 = character(), H4 = character(),
+                        Probability_h = numeric(),
+                        Probability_D_Positive = numeric(),
+                        stringsAsFactors = FALSE)
+
+# query for P(h|e) 
+e_1 <- setEvidence(bn_junction, 
+                   nodes = c('H1', 'H2', 'H3'), 
+                   states = c('positive','positive', 'positive')) # change state negative|positive
+result_1 <- as.data.frame.table(querygrain(e_1, nodes = c('H4'), type = "joint"))
+
+for (i in 1:nrow(evidence_scenarios)) {
+  
+  # set evidence for the current scenario
+  e_2 <- setEvidence(bn_junction,
+                     nodes = c('H1', 'H2', 'H3', 'H4'),
+                     states = as.character(evidence_scenarios2[[i]]))
+  
+  # perform query
+  result_2 <- querygrain(e_2, nodes = c('D'), type = 'joint')
+  
+  result_1_sub <- subset(result_1, H4 == evidence_scenarios2[[i]][4])$Freq
+  
+  result_df <- rbind(result_df, c(as.character(evidence_scenarios2[[i]]), result_1_sub, result_2['positive']))
+  
+}
+
+colnames(result_df) <- c("H1", "H2", "H3", "H4",
+                         "Probability_h","Probability_D_Positive")
+
+# Set the threshold
+threshold <- 0.55  # Adjust the threshold as needed
+
+# Filter the data frame based on the threshold
+filtered_result <- subset(result_df, Probability_D_Positive >= threshold)
+
+# Calculate the sum of the selected values
+sum_of_probabilities <- sum(as.numeric(filtered_result$Probability_h))
+
+# Print or use the sum_of_probabilities as needed
+print(sum_of_probabilities)
+print(1-sum_of_probabilities)
+#####-----
+
+# suppose we observe H4 -- change state for experiment
+scenario_H4 <- setEvidence(bn_junction, nodes = c('H1', 'H2', 'H4'), states = c('positive', 'positive', 'negative')) # change state negative|positive
+querygrain(scenario_H4, nodes = c('D'), type = 'joint')
+
+states <- list(
+  H3 = c('positive', 'negative')
+)
+
+combinations <- expand.grid(states)
+combinations$H1 <- "positive"
+combinations$H2 <- "positive"
+combinations$H4 <- 'negative' # change state negative|positive
+
+evidence_scenarios <- combinations %>%
+  relocate(H1, H2, H4, .before = everything())
+
+evidence_scenarios2 <- asplit(evidence_scenarios, 1)
+
+result_df <- data.frame(H1 = character(), H2 = character(),
+                        H4 = character(), H3 = character(),
+                        Probability_h = numeric(),
+                        Probability_D_Positive = numeric(),
+                        stringsAsFactors = FALSE)
+
+# query for P(h|e) 
+e_1 <- setEvidence(bn_junction, 
+                   nodes = c('H1', 'H2', 'H4'), 
+                   states = c('positive','positive', 'negative')) # change state negative|positive
+result_1 <- as.data.frame.table(querygrain(e_1, nodes = c('H3'), type = "joint"))
+
+for (i in 1:nrow(evidence_scenarios)) {
+  
+  # set evidence for the current scenario
+  e_2 <- setEvidence(bn_junction,
+                     nodes = c('H1', 'H2', 'H4', 'H3'),
+                     states = as.character(evidence_scenarios2[[i]]))
+  
+  # perform query
+  result_2 <- querygrain(e_2, nodes = c('D'), type = 'joint')
+  
+  result_1_sub <- subset(result_1, H3 == evidence_scenarios2[[i]][4])$Freq
+  
+  result_df <- rbind(result_df, c(as.character(evidence_scenarios2[[i]]), result_1_sub, result_2['positive']))
+  
+}
+
+colnames(result_df) <- c("H1", "H2", "H4", "H3",
+                         "Probability_h","Probability_D_Positive")
+
+# Set the threshold
+threshold <- 0.55  # Adjust the threshold as needed
+
+# Filter the data frame based on the threshold
+filtered_result <- subset(result_df, Probability_D_Positive >= threshold)
+
+# Calculate the sum of the selected values
+sum_of_probabilities <- sum(as.numeric(filtered_result$Probability_h))
+
+# Print or use the sum_of_probabilities as needed
+print(sum_of_probabilities)
+print(1-sum_of_probabilities)
+
+################################################################################
+# Pr(g|e)
+# H3
+scenH3 <- setEvidence(bn_junction, nodes = c('H1','H2'), states = c('positive','positive'))
+querygrain(scenH3, nodes = c('H3'), type = 'joint')
+
+# H4
+scenH4 <- setEvidence(bn_junction, nodes = c('H1','H2'), states = c('positive','positive'))
+querygrain(scenH4, nodes = c('H4'), type = 'joint')
+
+################################################################################
+# SDP: EXAMPLE 2 ASIA
+
+# ASIA
+asia <- readRDS("~/remove_later/thesis_code/asia.rds")
+
+# compile Bayesian network into a junction tree representation
+bn_asia <- compile(as.grain(asia))
+
+# decision on smoker
+# based on evidence P = true
+scenario <- setEvidence(bn_asia, nodes = c('smoke','xray'), states = c('yes','yes'))
+querygrain(scenario, nodes = c('lung'), type = 'conditional')
+
+# define evidence scenarios to 'observe'
+states <- list(
+  asia = c('yes', 'no')
+)
+
+combinations <- expand.grid(states)
+combinations$smoke <- 'yes'
+combinations$xray <- 'yes'
+
+evidence_scenarios <- combinations %>%
+  relocate(smoke, xray, .before = everything())
+evidence_scenarios2 <- asplit(evidence_scenarios, 1)
+
+result_df <- data.frame(smoke = character(),
+                        xray = character(),
+                        asia = character(),
+                        Probability_h = numeric(),
+                        Probability_D_Positive = numeric(),
+                        stringsAsFactors = FALSE)
+
+# Pr(h|e)
+e_1 <- setEvidence(bn_asia, 
+                   nodes = c('smoke','xray'), 
+                   states = c('yes','yes'))
+result_1 <- as.data.frame.table(querygrain(e_1, nodes = c('asia'), type = "joint"))
+
+for (i in 1:nrow(evidence_scenarios)) {
+  
+  # set evidence for the current scenario
+  e_2 <- setEvidence(bn_asia,
+                     nodes = c('smoke', 'xray', 'asia'),
+                     states = as.character(evidence_scenarios2[[i]]))
+  
+  # perform query
+  result_2 <- querygrain(e_2, nodes = c('lung'), type = 'joint')
+  
+  result_1_sub <- subset(result_1, asia == evidence_scenarios2[[i]][3])$Freq
+  
+  result_df <- rbind(result_df, c(as.character(evidence_scenarios2[[i]]), result_1_sub, result_2['yes']))
+  
+}
+
+colnames(result_df) <- c("smoke", "xray", "asia",
+                         "Probability_h","Probability_D_Positive")
+
+# Set the threshold
+threshold <- 0.6  # Adjust the threshold as needed
+
+# Filter the data frame based on the threshold
+filtered_result <- subset(result_df, Probability_D_Positive >= threshold)
+
+# Calculate the sum of the selected values
+sum_of_probabilities <- sum(as.numeric(filtered_result$Probability_h))
+
+# Print or use the sum_of_probabilities as needed
+print(sum_of_probabilities)
+
+
+
