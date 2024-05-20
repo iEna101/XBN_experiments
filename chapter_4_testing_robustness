@@ -1,0 +1,484 @@
+library(bnlearn)
+library(gRain)
+
+
+win95_bn <- readRDS("~/remove_later/updated_XBN/updated_XBN/win95_mre_sdp/win95pts (1).rds")
+
+# learn structure from data
+bn_win95 <- compile(as.grain(win95_bn))
+################################################################################
+target_set <- c("PrtPaper", "PrtSel", "PrtTimeOut", "TnrSpply")
+
+evidence_set <- c("Problem1", "PrtOn", "AppData")
+evidence_states <- c("No_Output", "Yes", "Correct")
+
+
+# set tuning parameter
+bn_rho = 0.001
+################################################################################
+initialisation <- init_gbf(target_set = target_set,
+                           evidence_set = evidence_set,
+                           evidence_states = evidence_states,
+                           bn_grain = bn_win95)
+print(initialisation)
+
+win95_full <- mre_brute(target_set = target_set, 
+                        evidence_set = evidence_set, 
+                        evidence_states = evidence_states, 
+                        bn_grain = bn_win95)
+
+win95_fwd <- mre_fwd(target_set = target_set, 
+                     evidence_set = evidence_set, 
+                     evidence_states = evidence_states, 
+                     bn_grain = bn_win95)
+print(win95_fwd)
+
+win95_fwdglasso <- mre_fwd_glasso(target_set = target_set, 
+                                  evidence_set = evidence_set, 
+                                  evidence_states = evidence_states, 
+                                  bn_grain = bn_win95,
+                                  bn_rho = bn_rho,
+                                  score_scale = TRUE)
+print(win95_fwdglasso)
+
+################################################################################
+# same-decision probability
+scenario <- setEvidence(bn_win95, 
+                        nodes = c('Problem1','PrtOn','AppData'), 
+                        states = c('No_Output', 'Yes','Correct'))
+querygrain(scenario, nodes = 'PC2PRT', type = 'joint')
+
+
+# define hidden scenarios
+states <- list(
+  PrtDataOut = c("Yes", "No" ),
+  PrtCbl = c("Connected","Loose")
+)
+
+combinations <- expand.grid(states)
+combinations$Problem1 <- "No_Output"
+combinations$AppData <- "Correct"
+combinations$PrtOn <- "Yes"
+
+evidence_scenarios <- combinations %>%
+  relocate(Problem1, AppData, PrtOn, .before = everything())
+
+evidence_scenarios2 <- asplit(evidence_scenarios, 1)
+
+result_df <- data.frame(Problem1 = character(), AppData = character(),
+                        PrtOn = character(), 
+                        PrtDataOut = character(), PrtCbl = character(),
+                        Probability_h = numeric(),
+                        Probability_D_Positive = numeric(),
+                        stringsAsFactors = FALSE)
+
+# query for P(h|e) 
+e_1 <- setEvidence(bn_win95, 
+                   nodes = c('Problem1','PrtOn', 'AppData'), 
+                   states = c('No_Output', 'Yes', 'Correct'))
+result_1 <- as.data.frame.table(querygrain(e_1, nodes = c('PrtDataOut', 'PrtCbl'), type = "joint"))
+
+for (i in 1:nrow(evidence_scenarios)) {
+  
+  # set evidence for the current scenario
+  e_2 <- setEvidence(bn_win95,
+                     nodes = c('Problem1','PrtOn','AppData',
+                               'PrtDataOut', 'PrtCbl'),
+                     states = as.character(evidence_scenarios2[[i]]))
+  
+  # perform query
+  result_2 <- querygrain(e_2, nodes = c('PC2PRT'), type = 'joint')
+  
+  result_1_sub <- subset(result_1, PrtDataOut == evidence_scenarios2[[i]][4] & PrtCbl == evidence_scenarios2[[i]][5])$Freq
+  
+  result_df <- rbind(result_df, c(as.character(evidence_scenarios2[[i]]), result_1_sub, result_2['Yes']))
+  
+}
+
+
+colnames(result_df) <- c('Problem1', 'AppData','PrtOn',
+                         'PrtDataOut', 'PrtCbl',
+                         "Probability_h","Probability_D_Positive")
+
+# Set the threshold
+threshold <- 0.5  # Adjust the threshold as needed
+
+# Filter the data frame based on the threshold
+filtered_result <- subset(result_df, Probability_D_Positive >= threshold)
+
+# Calculate the sum of the selected values
+sum_of_probabilities <- sum(as.numeric(filtered_result$Probability_h))
+
+# Print or use the sum_of_probabilities as needed
+print(sum_of_probabilities)
+
+################################################################################
+# Suppose we observe PrtDataOut = Yes
+scenario <- setEvidence(bn_win95, 
+                        nodes = c('Problem1','PrtOn','AppData', 'PrtDataOut'), 
+                        states = c('No_Output', 'Yes','Correct', 'Yes'))
+querygrain(scenario, nodes = 'PC2PRT', type = 'joint')
+
+# define hidden scenarios
+states <- list(
+  PrtCbl = c("Connected","Loose")
+)
+
+combinations <- expand.grid(states)
+combinations$Problem1 <- "No_Output"
+combinations$AppData <- "Correct"
+combinations$PrtOn <- "Yes"
+combinations$PrtDataOut <- "Yes"
+
+evidence_scenarios <- combinations %>%
+  relocate(Problem1, AppData, PrtOn, PrtDataOut, .before = everything())
+
+evidence_scenarios2 <- asplit(evidence_scenarios, 1)
+
+result_df <- data.frame(Problem1 = character(), AppData = character(),
+                        PrtOn = character(), PrtDataOut = character(),
+                        
+                        PrtCbl = character(),
+                        
+                        Probability_h = numeric(),
+                        Probability_D_Positive = numeric(),
+                        stringsAsFactors = FALSE)
+
+# query for P(h|e) 
+e_1 <- setEvidence(bn_win95, 
+                   nodes = c('Problem1','PrtOn', 'AppData', 'PrtDataOut'), 
+                   states = c('No_Output', 'Yes', 'Correct', 'Yes'))
+result_1 <- as.data.frame.table(querygrain(e_1, nodes = c('PrtCbl'), type = "joint"))
+
+for (i in 1:nrow(evidence_scenarios)) {
+  
+  # set evidence for the current scenario
+  e_2 <- setEvidence(bn_win95,
+                     nodes = c('Problem1','PrtOn','AppData', 'PrtDataOut',
+                               'PrtCbl'),
+                     states = as.character(evidence_scenarios2[[i]]))
+  
+  # perform query
+  result_2 <- querygrain(e_2, nodes = c('PC2PRT'), type = 'joint')
+  
+  result_1_sub <- subset(result_1, PrtCbl == evidence_scenarios2[[i]][5])$Freq
+  
+  result_df <- rbind(result_df, c(as.character(evidence_scenarios2[[i]]), result_1_sub, result_2['Yes']))
+  
+}
+
+
+colnames(result_df) <- c('Problem1', 'AppData','PrtOn',
+                         'PrtDataOut', 'PrtCbl',
+                         "Probability_h","Probability_D_Positive")
+
+# Set the threshold
+threshold <- 0.5  # Adjust the threshold as needed
+
+# Filter the data frame based on the threshold
+filtered_result <- subset(result_df, Probability_D_Positive >= threshold)
+
+# Calculate the sum of the selected values
+sum_of_probabilities <- sum(as.numeric(filtered_result$Probability_h))
+
+# Print or use the sum_of_probabilities as needed
+print(sum_of_probabilities)
+
+#########################
+# Suppose we observe PrtDataOut = No
+scenario <- setEvidence(bn_win95, 
+                        nodes = c('Problem1','PrtOn','AppData', 'PrtDataOut'), 
+                        states = c('No_Output', 'Yes','Correct', 'No'))
+querygrain(scenario, nodes = 'PC2PRT', type = 'joint')
+
+# define hidden scenarios
+states <- list(
+  PrtCbl = c("Connected","Loose")
+)
+
+combinations <- expand.grid(states)
+combinations$Problem1 <- "No_Output"
+combinations$AppData <- "Correct"
+combinations$PrtOn <- "Yes"
+combinations$PrtDataOut <- "No"
+
+evidence_scenarios <- combinations %>%
+  relocate(Problem1, AppData, PrtOn, PrtDataOut, .before = everything())
+
+evidence_scenarios2 <- asplit(evidence_scenarios, 1)
+
+result_df <- data.frame(Problem1 = character(), AppData = character(),
+                        PrtOn = character(), PrtDataOut = character(),
+                        
+                        PrtCbl = character(),
+                        
+                        Probability_h = numeric(),
+                        Probability_D_Positive = numeric(),
+                        stringsAsFactors = FALSE)
+
+# query for P(h|e) 
+e_1 <- setEvidence(bn_win95, 
+                   nodes = c('Problem1','PrtOn', 'AppData', 'PrtDataOut'), 
+                   states = c('No_Output', 'Yes', 'Correct', 'No'))
+result_1 <- as.data.frame.table(querygrain(e_1, nodes = c('PrtCbl'), type = "joint"))
+
+for (i in 1:nrow(evidence_scenarios)) {
+  
+  # set evidence for the current scenario
+  e_2 <- setEvidence(bn_win95,
+                     nodes = c('Problem1','PrtOn','AppData', 'PrtDataOut',
+                               'PrtCbl'),
+                     states = as.character(evidence_scenarios2[[i]]))
+  
+  # perform query
+  result_2 <- querygrain(e_2, nodes = c('PC2PRT'), type = 'joint')
+  
+  result_1_sub <- subset(result_1, PrtCbl == evidence_scenarios2[[i]][5])$Freq
+  
+  result_df <- rbind(result_df, c(as.character(evidence_scenarios2[[i]]), result_1_sub, result_2['Yes']))
+  
+}
+
+
+colnames(result_df) <- c('Problem1', 'AppData','PrtOn',
+                         'PrtDataOut', 'PrtCbl',
+                         "Probability_h","Probability_D_Positive")
+
+# Set the threshold
+threshold <- 0.5  # Adjust the threshold as needed
+
+# Filter the data frame based on the threshold
+filtered_result <- subset(result_df, Probability_D_Positive >= threshold)
+
+# Calculate the sum of the selected values
+sum_of_probabilities <- sum(as.numeric(filtered_result$Probability_h))
+
+# Print or use the sum_of_probabilities as needed
+print(sum_of_probabilities)
+print(1 - sum_of_probabilities)
+
+#####-----
+# Suppose we observe PrtCbl = Connected
+scenario <- setEvidence(bn_win95, 
+                        nodes = c('Problem1','PrtOn','AppData', 'PrtCbl'), 
+                        states = c('No_Output', 'Yes','Correct', 'Connected'))
+querygrain(scenario, nodes = 'PC2PRT', type = 'joint')
+
+
+# define hidden scenarios
+states <- list(
+  PrtDataOut = c("Yes", "No" )
+)
+
+combinations <- expand.grid(states)
+combinations$Problem1 <- "No_Output"
+combinations$AppData <- "Correct"
+combinations$PrtOn <- "Yes"
+combinations$PrtCbl <- "Connected"
+
+evidence_scenarios <- combinations %>%
+  relocate(Problem1, AppData, PrtOn, PrtCbl, .before = everything())
+
+evidence_scenarios2 <- asplit(evidence_scenarios, 1)
+
+result_df <- data.frame(Problem1 = character(), AppData = character(),
+                        PrtOn = character(), PrtCbl = character(),
+                        
+                        PrtDataOut = character(), 
+                        
+                        Probability_h = numeric(),
+                        Probability_D_Positive = numeric(),
+                        stringsAsFactors = FALSE)
+
+# query for P(h|e) 
+e_1 <- setEvidence(bn_win95, 
+                   nodes = c('Problem1','PrtOn', 'AppData', 'PrtCbl'), 
+                   states = c('No_Output', 'Yes', 'Correct', 'Connected'))
+result_1 <- as.data.frame.table(querygrain(e_1, nodes = c('PrtDataOut'), type = "joint"))
+
+for (i in 1:nrow(evidence_scenarios)) {
+  
+  # set evidence for the current scenario
+  e_2 <- setEvidence(bn_win95,
+                     nodes = c('Problem1','PrtOn','AppData', 'PrtCbl',
+                               'PrtDataOut'),
+                     states = as.character(evidence_scenarios2[[i]]))
+  
+  # perform query
+  result_2 <- querygrain(e_2, nodes = c('PC2PRT'), type = 'joint')
+  
+  result_1_sub <- subset(result_1, PrtDataOut == evidence_scenarios2[[i]][5])$Freq
+  
+  result_df <- rbind(result_df, c(as.character(evidence_scenarios2[[i]]), result_1_sub, result_2['Yes']))
+  
+}
+
+
+colnames(result_df) <- c('Problem1', 'AppData','PrtOn', 'PrtCbl',
+                         'PrtDataOut', 
+                         "Probability_h","Probability_D_Positive")
+
+# Set the threshold
+threshold <- 0.5  # Adjust the threshold as needed
+
+# Filter the data frame based on the threshold
+filtered_result <- subset(result_df, Probability_D_Positive >= threshold)
+
+# Calculate the sum of the selected values
+sum_of_probabilities <- sum(as.numeric(filtered_result$Probability_h))
+
+# Print or use the sum_of_probabilities as needed
+print(sum_of_probabilities)
+
+#########################
+# Suppose we observe PrtCbl = Loose
+scenario <- setEvidence(bn_win95, 
+                        nodes = c('Problem1','PrtOn','AppData', 'PrtCbl'), 
+                        states = c('No_Output', 'Yes','Correct', 'Loose'))
+querygrain(scenario, nodes = 'PC2PRT', type = 'joint')
+
+
+# define hidden scenarios
+states <- list(
+  PrtDataOut = c("Yes", "No" )
+)
+
+combinations <- expand.grid(states)
+combinations$Problem1 <- "No_Output"
+combinations$AppData <- "Correct"
+combinations$PrtOn <- "Yes"
+combinations$PrtCbl <- "Loose"
+
+evidence_scenarios <- combinations %>%
+  relocate(Problem1, AppData, PrtOn, PrtCbl, .before = everything())
+
+evidence_scenarios2 <- asplit(evidence_scenarios, 1)
+
+result_df <- data.frame(Problem1 = character(), AppData = character(),
+                        PrtOn = character(), PrtCbl = character(),
+                        
+                        PrtDataOut = character(), 
+                        
+                        Probability_h = numeric(),
+                        Probability_D_Positive = numeric(),
+                        stringsAsFactors = FALSE)
+
+# query for P(h|e) 
+e_1 <- setEvidence(bn_win95, 
+                   nodes = c('Problem1','PrtOn', 'AppData', 'PrtCbl'), 
+                   states = c('No_Output', 'Yes', 'Correct', 'Loose'))
+result_1 <- as.data.frame.table(querygrain(e_1, nodes = c('PrtDataOut'), type = "joint"))
+
+for (i in 1:nrow(evidence_scenarios)) {
+  
+  # set evidence for the current scenario
+  e_2 <- setEvidence(bn_win95,
+                     nodes = c('Problem1','PrtOn','AppData', 'PrtCbl',
+                               'PrtDataOut'),
+                     states = as.character(evidence_scenarios2[[i]]))
+  
+  # perform query
+  result_2 <- querygrain(e_2, nodes = c('PC2PRT'), type = 'joint')
+  
+  result_1_sub <- subset(result_1, PrtDataOut == evidence_scenarios2[[i]][5])$Freq
+  
+  result_df <- rbind(result_df, c(as.character(evidence_scenarios2[[i]]), result_1_sub, result_2['Yes']))
+  
+}
+
+
+colnames(result_df) <- c('Problem1', 'AppData','PrtOn', 'PrtCbl',
+                         'PrtDataOut', 
+                         "Probability_h","Probability_D_Positive")
+
+# Set the threshold
+threshold <- 0.5  # Adjust the threshold as needed
+
+# Filter the data frame based on the threshold
+filtered_result <- subset(result_df, Probability_D_Positive >= threshold)
+
+# Calculate the sum of the selected values
+sum_of_probabilities <- sum(as.numeric(filtered_result$Probability_h))
+
+# Print or use the sum_of_probabilities as needed
+print(sum_of_probabilities)
+print(1 - sum_of_probabilities)
+
+################################################################################
+# Pr(g|e)
+# PrtDataOut, SDP = 0.949675, 1
+scenario_PrtDataOut <- setEvidence(bn_win95, 
+                                   nodes = c('Problem1','PrtOn','AppData'),
+                                   states = c('No_Output', 'Yes','Correct'))
+querygrain(scenario_PrtDataOut, nodes = c('PrtDataOut'), type = 'joint')
+
+# PrtCbl
+# SDP = 0.6836545, 1
+scenario_PrtCbl <- setEvidence(bn_win95, 
+                               nodes = c('Problem1','PrtOn','AppData'),
+                               states = c('No_Output', 'Yes','Correct'))
+querygrain(scenario_PrtCbl, nodes = c('PrtCbl'), type = 'joint')
+
+################################################################################
+
+target_set <- c('TnrSpply','PrtPaper','PrtTimeOut','PrtSel')
+evidence_set <- c("Problem1", "PrtOn", "AppData", "PrtDataOut")
+evidence_states <- c("No_Output", "Yes", "Correct", "Yes")
+
+bn_rho = 0.001
+
+initialisation <- init_gbf(target_set = target_set,
+                           evidence_set = evidence_set,
+                           evidence_states = evidence_states,
+                           bn_grain = bn_win95)
+print(initialisation)
+
+insurance_full <- mre_brute(target_set = target_set, 
+                            evidence_set = evidence_set, 
+                            evidence_states = evidence_states, 
+                            bn_grain = bn_win95)
+
+insurance_fwd <- mre_fwd(target_set = target_set, 
+                         evidence_set = evidence_set, 
+                         evidence_states = evidence_states, 
+                         bn_grain = bn_win95)
+print(insurance_fwd)
+
+insurance_fwdglasso <- mre_fwd_glasso(target_set = target_set, 
+                                      evidence_set = evidence_set, 
+                                      evidence_states = evidence_states, 
+                                      bn_grain = bn_win95,
+                                      bn_rho = bn_rho,
+                                      score_scale = TRUE)
+print(insurance_fwdglasso)
+
+################################################################################
+
+# Most probable explanation -- initial evidence
+mpe_evidence <- setEvidence(bn_win95, 
+                            nodes = c('Problem1','PrtOn','AppData'),
+                            states = c('No_Output', 'Yes','Correct'))
+joint_distribution <- querygrain(mpe_evidence,
+                                 nodes = c('TnrSpply','PrtPaper','PrtTimeOut','PrtSel'),
+                                 type = 'joint')
+
+# save to data.frame
+joint_distribution_df <- as.data.frame.table(joint_distribution)
+# arrange from highest to lowest
+joint_distribution_df <- joint_distribution_df %>%
+  arrange(desc(Freq))
+
+####################
+# Most probable explanation -- initial evidence
+mpe_evidence <- setEvidence(bn_win95, 
+                            nodes = c('Problem1','PrtOn','AppData','PrtDataOut'),
+                            states = c('No_Output', 'Yes','Correct', 'Yes'))
+joint_distribution <- querygrain(mpe_evidence,
+                                 nodes = c('TnrSpply','PrtPaper','PrtTimeOut','PrtSel'),
+                                 type = 'joint')
+
+# save to data.frame
+joint_distribution_df <- as.data.frame.table(joint_distribution)
+# arrange from highest to lowest
+joint_distribution_df <- joint_distribution_df %>%
+  arrange(desc(Freq))
