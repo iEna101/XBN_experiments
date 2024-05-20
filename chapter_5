@@ -1,0 +1,72 @@
+devtools::install_github('iEna101/XBN')
+library(XBN)
+
+################################################################################
+# ASIA
+asia <- readRDS("~/remove_later/thesis_code/asia.rds")
+
+# compile Bayesian network into a junction tree representation
+bn_asia <- compile(as.grain(asia))
+
+init_gbf(target_set = c("tub", "lung", "bronc"),
+          evidence_set = c("dysp"),
+          evidence_states = c("yes"),
+          bn_grain = bn_asia)
+
+mre_brute(target_set = c("tub", "lung", "bronc"),
+           evidence_set = c("dysp"),
+           evidence_states = c("yes"),
+           bn_grain = bn_asia)
+
+mre_fwd(target_set = c("tub", "lung", "bronc"),
+        evidence_set = c("dysp"),
+        evidence_states = c("yes"),
+        bn_grain = bn_asia)
+
+mre_fwd_glasso(target_set = c("tub", "lung", "bronc"),
+               evidence_set = c("dysp"),
+               evidence_states = c("yes"),
+               bn_grain = bn_asia,
+               bn_rho = 0.001,
+               score_scale = TRUE)
+################################################################################
+# INSURANCE
+
+data("insurance")
+# description of variables: https://www.bnlearn.com/documentation/man/insurance.html
+
+# learn structure from data
+network <- hc(insurance)
+#
+nb.fit <- bn.fit(network, data = insurance)
+
+bn = nb.fit
+
+# compile Bayesian network into a junction tree representation
+bn_insurance <- compile(as.grain(bn))
+
+target_set <- c("Antilock", "DrivHist", "DrivQuality", "RiskAversion", "RuggedAuto")
+evidence_set <- c("Accident", "Age", "SeniorTrain")
+evidence_states <- c("Moderate", "Adult", "False")
+
+init_gbf(target_set = target_set,
+         evidence_set = evidence_set,
+         evidence_states = evidence_states,
+         bn_grain = bn_insurance)
+
+mre_brute(target_set = target_set,
+           evidence_set = evidence_set,
+           evidence_states = evidence_states,
+           bn_grain = bn_insurance)
+
+mre_fwd(target_set = target_set,
+        evidence_set = evidence_set,
+        evidence_states = evidence_states,
+        bn_grain = bn_insurance)
+
+mre_fwd_glasso(target_set = target_set,
+               evidence_set = evidence_set,
+               evidence_states = evidence_states,
+               bn_grain = bn_insurance,
+               bn_rho = 0.001,
+               score_scale = TRUE)
