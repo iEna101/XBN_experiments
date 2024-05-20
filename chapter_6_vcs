@@ -1,0 +1,1497 @@
+library(readr)
+library(haven)
+library(tidyverse)
+library(bnlearn)
+
+vcs_2017_2018_hhold_v1 <- read_csv("~/remove_later/data/vcs-2017-2018-v1.1-csv/vcs-2017-2018-v1.1-csv/vcs-2017-2018-hhold-v1.csv")
+
+
+vcs_2017_2018_hhold_v1_stata <- read_dta("~/remove_later/data/vcs-2017-2018-v1.1-stata/vcs-2017-2018-v1.1-stata/vcs-2017-2018-hhold-v1.dta")
+
+vcs_2017_2018_hhold_v1_2 <- vcs_2017_2018_hhold_v1_stata[,1:30]
+
+vcs_2017_2018_hhold_v1_2 <- sapply(vcs_2017_2018_hhold_v1_2, as.numeric)
+
+vcs_2017_2018_hhold_v1_2 <- as.data.frame(vcs_2017_2018_hhold_v1_2)
+
+# person
+vcs_person <- read_dta("~/remove_later/data/vcs-2017-2018-v1.1-stata/vcs-2017-2018-v1.1-stata/vcs-2017-2018-person-v1.dta")
+
+################################################################################
+# extract person-level data
+df_person <- vcs_person %>%
+  select(uqno, gender, race, age, Q14HIEDU, Q16NATWORK) %>%
+  select(-c(race))
+
+# keep only aged 18+
+df_person <- df_person %>%
+  filter(age >= 18)
+
+# create categories for Q14HIEDU
+df_person <- df_person %>%
+  mutate(education = case_when(
+    Q14HIEDU == 1 | Q14HIEDU == 2 | Q14HIEDU == 3 | Q14HIEDU == 4 |
+      Q14HIEDU == 5 | Q14HIEDU == 6 | Q14HIEDU == 7 ~ 'primary_school',
+    Q14HIEDU == 8 | Q14HIEDU == 9 | Q14HIEDU == 10 | Q14HIEDU == 11 ~ 'high_school', 
+    Q14HIEDU == 12 | Q14HIEDU == 13 ~ 'matric',
+    Q14HIEDU == 14 | Q14HIEDU == 15 | Q14HIEDU == 16 | Q14HIEDU == 17 |
+      Q14HIEDU == 18 | Q14HIEDU == 19 | Q14HIEDU == 20 | Q14HIEDU == 21 ~ 'vocational_technical_training',
+    Q14HIEDU == 22 | Q14HIEDU == 23 | Q14HIEDU == 24 | Q14HIEDU == 25 | 
+      Q14HIEDU == 26 | Q14HIEDU == 27 | Q14HIEDU == 28 | Q14HIEDU == 29 ~ 'higher_education',
+    Q14HIEDU == 99 ~ 'unspecified',
+    TRUE ~ 'other'
+  ))
+
+# create categories for Q16NATWORK
+df_person <- df_person %>%
+  mutate(economic_activity = case_when(
+    Q16NATWORK == 1 ~ 'permanent',
+    Q16NATWORK == 2 ~ 'fixed_contract',
+    Q16NATWORK == 3 ~ 'temporary',
+    Q16NATWORK == 4 ~ 'casual',
+    Q16NATWORK == 5 ~ 'seasonal',
+    Q16NATWORK == 6 | Q16NATWORK == 7 | Q16NATWORK == 8 ~ 'unspecified'
+  ))
+
+df_person <- df_person %>%
+  mutate(gender = case_when(
+    gender == 1 ~ 'male',
+    gender == 2 ~ 'female',
+    TRUE ~ NA
+  ))
+
+df_person <- df_person %>%
+  mutate(age_group = case_when(
+    age >= 18 & age < 24 ~ 'young', 
+    age >= 24 & age < 45 ~ 'early_career',
+    age >= 45 & age < 68 ~ 'late_career',
+    age >= 68 ~ 'retired',
+    TRUE ~ NA
+  ))
+
+df_person <- df_person %>%
+  select(-c(Q14HIEDU, Q16NATWORK, age))
+
+################################################################################
+# household level
+
+df_household <- vcs_2017_2018_hhold_v1_stata %>%
+  mutate(type_crime_occur = case_when(
+    Q22101Murder == 1 ~ 'violent_crime',
+    Q22102StrRob == 1 ~ 'property_crime',
+    Q22103HomeRob == 1 ~ 'property_crime',
+    Q22104BussRob == 1 ~ 'property_crime',
+    Q22105Hijack == 1 ~ 'property_crime',
+    Q22106Assault == 1 ~ 'violent_crime',
+    Q22107SexAssult == 1 ~ 'violent_crime',
+    Q22108ChildAbuse == 1 ~ 'violent_crime',
+    Q22110Vigilante == 1 ~ 'violent_crime',
+    Q22111BagSnatch == 1 ~ 'property_crime',
+    Q22112Bicycle == 1 ~ 'property_crime',
+    Q22113Vehicle == 1 ~ 'property_crime',
+    Q22114Burglary == 1 ~ 'property_crime',
+    Q22115Crop == 1 ~ 'property_crime',
+    Q22116Livestock == 1 ~ 'property_crime',
+    Q22117WhiteCollar == 1 ~ 'property_crime',
+    Q22118damage == 1 ~ 'property_crime',
+    Q22119IDtheft == 1 ~ 'property_crime',
+    Q22120HumanTrafficking == 1 ~ 'violent_crime',
+    Q22121DrugTrafficking == 1 ~ 'violent_crime',
+    Q22122HateCrime == 1 ~ 'violent_crime',
+    Q22123Other == 1 ~ 'other',
+    TRUE ~ 'none'
+  )) %>%
+  select(-c(Q22101Murder, Q22102StrRob, Q22103HomeRob, Q22104BussRob,
+            Q22105Hijack, Q22106Assault, Q22107SexAssult, Q22108ChildAbuse,
+            Q22110Vigilante, Q22111BagSnatch, Q22112Bicycle, Q22113Vehicle,
+            Q22114Burglary, Q22115Crop, Q22116Livestock, Q22117WhiteCollar,
+            Q22118damage, Q22119IDtheft, Q22120HumanTrafficking, 
+            Q22121DrugTrafficking, Q22122HateCrime, Q22123Other))
+
+df_household <- df_household %>%
+  mutate(type_crime_afraid = case_when(
+    Q22201Murder == 1 ~ 'violent_crime',
+    Q22202StrRob == 1 ~ 'property_crime',
+    Q22203HomeRob == 1 ~ 'property_crime',
+    Q22204BussRob == 1 ~ 'property_crime',
+    Q22205Hijack == 1 ~ 'property_crime',
+    Q22206Assault == 1 ~ 'violent_crime',
+    Q22207SexAssult == 1 ~ 'violent_crime',
+    Q22208ChildAbuse == 1 ~ 'violent_crime',
+    Q22210Vigilante == 1 ~ 'violent_crime',
+    Q22211BagSnatch == 1 ~ 'property_crime',
+    Q22212Bicycle == 1 ~ 'property_crime',
+    Q22213Car == 1 ~ 'property_crime',
+    Q22214Burglary == 1 ~ 'property_crime',
+    Q22215Crop == 1 ~ 'property_crime',
+    Q22216Livestock == 1 ~ 'property_crime',
+    Q22217WhiteCollar == 1 ~ 'property_crime',
+    Q22218damage == 1 ~ 'property_crime',
+    Q22219IDtheft == 1 ~ 'property_crime',
+    Q22220HumanTrafficking == 1 ~ 'violent_crime',
+    Q22221DrugTrafficking == 1 ~ 'violent_crime',
+    Q22222HateCrime == 1 ~ 'violent_crime',
+    Q22223Other == 1 ~ 'other',
+    TRUE ~ 'none'
+  ))  %>%
+  select(-c(Q22201Murder, Q22202StrRob, Q22203HomeRob, Q22204BussRob,
+            Q22205Hijack, Q22206Assault, Q22207SexAssult, Q22208ChildAbuse,
+            Q22210Vigilante, Q22211BagSnatch, Q22212Bicycle, Q22213Car,
+            Q22214Burglary, Q22215Crop, Q22216Livestock, Q22217WhiteCollar,
+            Q22218damage, Q22219IDtheft, Q22220HumanTrafficking, 
+            Q22221DrugTrafficking, Q22222HateCrime, Q22223Other))
+
+df_household <- df_household %>%
+  select(-c(gender, race, age, TOTNOPHH, Q11RELTOHEAD, Q171SALARIES, Q172INBUSIN,
+            Q173REMITT, Q174PENS, Q175GRANTS, Q176FARMPROD, Q177OTHER, Q18MAININCOME,
+            K_MOTORIS, L_WORKING, Q22109ServDelivery, Q22209ServDelivery))
+
+df_household <- df_household %>%
+  mutate(fear_crime_prevent_actions = case_when(
+    Q251PubTrans == 1 ~ 'public_safety_concerns',
+    Q252WalkShop == 1 ~ 'public_safety_concerns',
+    Q253WalkTown == 1 ~ 'public_safety_concerns',
+    Q254dressing == 1 ~ 'personal_expression_freedom',
+    Q255expressing == 1 ~ 'personal_expression_freedom',
+    Q256Parks == 1 ~ 'public_safety_concerns',
+    Q257ChildPlay == 1 ~ 'public_safety_concerns',
+    Q258ChildWalk == 1 ~ 'public_safety_concerns',
+    Q259Livestock == 1 ~ 'livestock_concerns',
+    Q2510Investing == 1 ~ 'livelihood_econ_activities',
+    Q2511WalkFetchwood == 1 ~ 'public_safety_concerns',
+    TRUE ~ 'other'
+  )) %>%
+  select(-c(Q251PubTrans, Q252WalkShop, Q253WalkTown, Q254dressing, Q255expressing,
+            Q256Parks, Q257ChildPlay, Q258ChildWalk, Q259Livestock, Q2510Investing,
+            Q2511WalkFetchwood))
+
+df_household <- df_household %>%
+  mutate(Q210CommitCrime = case_when(
+    Q210CommitCrime == 1 ~ 'socioeconomic_factors',
+    Q210CommitCrime == 2 ~ 'socioeconomic_factors',
+    Q210CommitCrime == 3 ~ 'socioeconomic_factors',
+    Q210CommitCrime == 4 ~ 'emotional_interpersonal',
+    Q210CommitCrime == 5 ~ 'emotional_interpersonal',
+    Q210CommitCrime == 6 ~ 'emotional_interpersonal',
+    Q210CommitCrime == 7 ~ 'group_dynamics_socialpolitical',
+    Q210CommitCrime == 8 ~ 'group_dynamics_socialpolitical',
+    Q210CommitCrime == 9 ~ 'group_dynamics_socialpolitical',
+    Q210CommitCrime == 10 ~ 'group_dynamics_socialpolitical',
+    Q210CommitCrime == 11 ~ 'conflict_lawenforcement',
+    Q210CommitCrime == 12 ~ 'cultural_societal_factors',
+    Q210CommitCrime == 13 ~ 'cultural_societal_factors',
+    Q210CommitCrime == 14 ~ 'other',
+    TRUE ~ 'other'
+  ))
+
+df_household <- df_household %>%
+  mutate(protection_measures_indiv = case_when(
+    Q323Weapons == 1 ~ 'weapon',
+    Q324PrivSecur == 1 ~ 'private_security',
+    Q325SelfHelp == 1 ~ 'selfhelp_group',
+    Q326Other == 1 ~ 'other',
+    TRUE ~ NA
+  )) %>%
+  select(-c(Q321Home, Q322Vehicle, Q323Weapons, Q324PrivSecur, Q325SelfHelp, Q326Other))
+
+df_household <- df_household %>%
+  mutate(protection_groups = case_when(
+    Q351ComPolForum == 1 ~ 'community_policing_forum',
+    Q352NghbhoodWatch == 1 ~ 'neighbourhood_watch',
+    Q353PrivtSecrty == 1 ~ 'private_security',
+    Q354ReligTrad == 1 ~ 'religious_traditional_leaders',
+    Q355Other == 1 ~ 'other',
+    TRUE ~ NA
+  )) %>%
+  select(-c(Q351ComPolForum, Q352NghbhoodWatch, Q353PrivtSecrty, Q354ReligTrad, Q355Other))
+
+df_household <- df_household %>%
+  mutate(access_instituitions = case_when(
+    Q371Courts == 1 ~ 'courts',
+    Q372Police == 1 ~ 'police',
+    Q373VEMTcentres == 1 ~ 'victim_empowerment',
+    Q374Medinsti == 1 ~ 'medical',
+    Q375NGO == 1 ~ 'ngo_cbo',
+    Q376Other == 1 ~ 'other',
+    TRUE ~ NA
+  ),
+  
+  ) %>%
+  select(-c(Q371Courts, Q372Police, Q373VEMTcentres, Q374Medinsti, Q375NGO, Q376Other,
+            Q421Police, Q422Hospital, Q423Clinic, Q424Doctor, Q425NGO, Q426VicEmpower,
+            Q427Tradleader, Q428Courts, Q429Other, Q441Police, Q442Hospital, Q443Clinic,
+            Q444PrivDoc, Q445NGO, Q446VicEmpCen, Q447Trad, Q448Courts, Q449Other))
+
+df_household <- df_household %>%
+  select(-c(Q51Neighbour, Q52Watch, Q53Trust, Q541RELGROUP, Q542STOKVEL, 
+            Q543ComPrevForum, Q544SPORTS, Q545Other, Q56Freqheld, Q63POLSTA3YRS,
+            Q64ContPolice, Q67SatisfyPolice, Q68NotSatifyPolice, Q73Why_Court,
+            Q76Whysatisf, Q77Whynot, Q83KnowPrisoner, Q841Church, Q842Community,
+            Q843Neighbour, Q844Homemeal, Q845Employment, Q846StartBusiness,
+            Q847Apartment, Q848Marry, Q851Rehabilitat, Q852Crokcolleg,
+            Q853comfort, Q854Easyparol, Q855rytviolat, Q856Easyexcp, Q857NotRecomit,
+            Q858Saflockaway, Q922SAPS, Q923PublicComission, Q924PublicProtector,
+            Q925NGO, Q926Ombudsperson, Q927Journalist, Q928Telephone, Q929Other,
+            Q931Realneed, Q932Greed, Q933Getrich, Q934Other, Q95bribreasn,
+            Q96GOVTCorrupt))
+
+df_household <- df_household %>%
+  mutate(crime_experienced = case_when(
+    Q10aCar == 1 ~ 'property_crime',
+    Q10bHous == 1 ~ 'property_crime',
+    Q10cHomeRob == 1 ~ 'property_crime',
+    Q10dLiveStck == 1 ~ 'property_crime',
+    Q10ecrops == 1 ~ 'property_crime',
+    Q10fMurder == 1 ~ 'violent_crime',
+    Q10gTrafpersons == 1 ~ 'violent_crime',
+    Q10hMVehicle == 1 ~ 'property_crime',
+    Q10iDamageDU == 1 ~ 'property_crime',
+    Q10jDamageVeh == 1 ~ 'property_crime',
+    Q10kTheftBic == 1 ~ 'property_crime',
+    Q10lOther == 1 ~ 'other',
+    Q10mSexual == 1 ~ 'violent_crime',
+    Q10nAssault == 1 ~ 'violent_crime',
+    TRUE ~ 'none'
+    
+  )) %>%
+  select(-c(Q10aCar, Q10aExp, Q10aMany, Q10aMnth, Q10aYear,
+            Q10bHous, Q10bExp, Q10bMany, Q10bMnth, Q10bYear,
+            Q10cHomeRob, Q10cExp, Q10cMany, Q10cMnth, Q10cYear,
+            Q10dLiveStck, Q10dExp, Q10dMany, Q10dMnth, Q10dYear,
+            Q10ecrops, Q10eExp, Q10eMany, Q10eMnth, Q10eYear,
+            Q10fMurder, Q10fExp, Q10fMany, Q10fMnth, Q10fYear,
+            Q10gTrafpersons, Q10gExp, Q10gMany, Q10gMnth, Q10gYear,
+            Q10hMVehicle, Q10hExp, Q10hMany, Q10HMNTH, Q10hYear,
+            Q10iDamageDU, Q10iExp, Q10iMany, Q10iMnth, Q10iYear,
+            Q10jDamageVeh, Q10jExp, Q10jMany, Q10jMnth, Q10jYear,
+            Q10kTheftBic, Q10kExp, Q10kMany, Q10kMnth, Q10kYear,
+            Q10lOther, Q10lExp, Q10lMany, Q10lMnth, Q10lYear,
+            Q10mSexual, Q10mExpMale, Q10mExpFemale, Q10mMnth, Q10mYear,
+            Q10nAssault, Q10nExpMale, Q10nExpFemale, Q10nMnth, Q10nYear))
+
+df_household <- df_household %>%
+  select(-c(Q111Location, Q112Time, Q113When, Q114HHReport, Q115Why_Not, Q116Satisfied,
+            Q117Arrest, Q118Attend_Court, Q119A_Convict, Q11101Police,
+            Q11102Detective, Q11103Procecutor, Q11104Judge, Q11105Stlawyr,
+            Q11106Privlawyr, Q11107Other, Q1111Report_crime, Q1112First_Report_to,
+            Q1113Stolen_Recovered, Q1114Know_Who, Q1115How_Do_You_know,
+            Q11161MYThan15, Q11162_M15to34, Q11163_M35to54, Q11164_M55Older,
+            Q11165_MUknAge, Q11166_MDonotknow, Q11161_FYThan15, Q11162_F15to34,
+            Q11163_F35to54, Q11164_F55Older, Q11165_FUknAge, Q11166_FDonotknow,
+            Q11171_MYThan15, Q11172_M15to34, Q11173_M35to54, Q11174_M55Older,
+            Q11175_MUknAge, Q11176_MDonotknow, Q11171_FYThan15, Q11172_F15to34,
+            Q11173_F35to54, Q11174_F55Older, Q11175_FUknAge, Q11176_FDonotknow,
+            Q1118Vehicle_Insured, Q1119Changed_Behaviour, Q11201Protect,
+            Q11202StayHome, Q11203ChangRoute, Q11204Avoid, Q11205Alert,
+            Q11206CarryGun, Q11207CaryWeapon, Q11208Other, Q1121Feel_Safer,
+            Q121HHMembers, Q122Time, Q123Enter, Q124LoseProp, Q1251HandBag,
+            Q1252Money, Q1253ElecEqp, Q1254TravBag, Q1255Food, Q1256PerEffe,
+            Q1257Cellph, Q1258Clothes, Q1259TV, Q12510Radio, Q12511Bicycle,
+            Q1212Other, Q126Insured, Q127Report, Q128WhyNot, Q129Satisfied,
+            Q1210Arrest, Q1211Court, Q1212Convicted, Q12131Police, Q12132Detective,
+            Q12133Prosecutor, Q12134Judge, Q12135stlawyr, Q12136privlawyr,
+            Q12137Other, Q1214Report, Q1215Who, Q1216recovered, Q1217Know,
+            Q1218How, Q12191_MYThan15, Q12192_M15to34, Q12193_M35to54,
+            Q12194_M55Older, Q12195_MUknAge, Q12196_MDonotknow, Q12191FYThan15,
+            Q12192_F15to34, Q12193_F35to54, Q12194_F55Older, Q12195_FUknAge,
+            Q12196_FDonotknow, Q12201MYThan15, Q12202_M15to34, Q12203_M35to54,
+            Q12204_M55Older, Q12205_MUknAge, Q12206_MDonotknow, Q12201FYThan15,
+            Q12202_F15to34, Q12203_F35to54, Q12204_F55Older, Q12205_FUknAge,
+            Q12206_FDonotknow, Q1221Secure, Q12221Security, Q12222Aware,
+            Q12223CarryGun, Q12224CaryWeapon, Q12225Houseunatt, Q12226Alarm,
+            Q12227Replacelock, Q12228Other, Q1223Safer, Q131Norobbers,
+            Q132Resist, Q133Period, Q134Weapons, Q1351knife, Q1352Club,
+            Q1353Metal, Q1354Axe, Q1355Gun, Q1356Other, Q136PerpInjured,
+            Q137Injured, Q138Medical, Q139Hospital, Q1310Die, Q1311Loseprop,
+            Q13121Wall, Q13122Cash, Q13123Equip, Q13124TravBag, Q13125Food,
+            Q13126Persn, Q13127Cell, Q13128Other, Q1313Report, Q1314Whynot,
+            Q1315Satisfied, Q1316Arrest, Q1317Court, Q1318Convict, 
+            Q13191Police, Q13192Detectives, Q13193Prosecutor, Q13194Judge,
+            Q13195Stlawyr, Q13196Privlawyr, Q13197Other, Q1320Reportanothr,
+            Q1321Ifyesfirstreprt, Q1322GoodsRecover, Q1323KnwRobber, Q1324How,
+            Q13252_M15to34, Q13253_M35to54, Q13254_M55Older, Q13255_MUknAge,
+            Q13256_MDonotknow, Q13251_FYThan15, Q13252_F15to34, Q13253_F35to54,
+            Q13254_F55Older, Q13255_FUknAge, Q13256_FDonotknow, Q13261_MYThan15,
+            Q13262_M15to34, Q13263_M35to54, Q13264_M55Older, Q13265_MUknAge,
+            Q13266_MDonotknow, Q13261_FYThan15, Q13262_F15to34, Q13263_F35to54,
+            Q13264_F55Older, Q13265_FUknAge, Q13266_FDonotknow, Q1327Changedbehav,
+            Q13281Protect, Q13282Aware, Q13283CarryGun, Q13284CaryWeapon,
+            Q13285Houseunatt, Q13286Alarm, Q13287Replacelock, Q13288Other,
+            Q1329Safer, Q13251_MYThan15))
+
+df_household <- df_household %>%
+  select(-c(starts_with('Q14'), starts_with('Q15'), starts_with('Q16'),
+            starts_with('Q17'), starts_with('Q18'), starts_with('Q19'),
+            starts_with('Q20')))
+
+# rename variables for clarity
+df_household <- df_household %>%
+  dplyr::rename(topic_of_crime = Q21topiccrime,
+                level_violent_crime_changed = Q23LeviolCrime,
+                level_property_crime_changed = Q24PropCrime,
+                property_crime_committed_by = Q26PropCrime,
+                violent_crime_committed_by = Q27LeviolCrime,
+                government_spending = Q31GovSpend,
+                walk_alone_day = Q28WalkDAY,
+                walk_alone_dark = Q29WalkDARK,
+                why_crime_commit = Q210CommitCrime,
+                safer_after_measures = Q33FeelSafer,
+                protect_groups_yn = Q34Group,
+                first_contact = Q36Victims,
+                medical_access_yn = Q41AccMed,
+                counselling_access_yn = Q43Counsel,
+                shelter_access_yn = Q45SafetyShelter,
+                shelter_nature = Q46ShelterSafety,
+                shelter_mean_time = Q47SheltPlcmodtran,
+                forum = Q55Forum,
+                nearest_police_yn = Q61NEARPOLSTA,
+                police_mean_time = Q62Time,
+                police_response_time = Q65Time,
+                satisfied_police = Q66Satisfied,
+                police_visibility = Q69Visible,
+                spec_operations = Q610SPEC1YR,
+                specop_reduce_crime = Q611REDUCE,
+                child_approach_police = Q612APPROACH,
+                trust_saps = Q613SAPS,
+                trust_metro = Q614Metro,
+                nearest_court_yn = Q71DiscussCourt,
+                attend_court = Q72AttCourt,
+                violent_crime_sentence = Q74ssviolcrim,
+                satisfied_courts_perps = Q75SatisfServ,
+                prison = Q81Prison,
+                satisfied_rehab_criminals = Q82SatisRehabilitate,
+                report_corrupt_yn = Q91ReportCorruption,
+                corrupt_change = Q94coruptlevlchng,
+                bribe_ask = Q97Bribeask
+  )
+
+df_household <- df_household %>%
+  select(-c(stratum, psuno, hhd_wgt, Personno, nearest_police_yn ))
+
+df_household <- df_household %>%
+  mutate(safer_after_measures = case_when(
+    safer_after_measures == 8 ~ 9, # 9 will now represent do not know
+    TRUE ~ safer_after_measures
+  ))
+
+################################################################################
+# merge the two data sets
+df_household <- df_household %>%
+  dplyr::rename(uqno = UQNO)
+df_merged <- left_join(df_person, df_household, by = c("uqno"))
+
+################################################################################
+df_merged2 <- df_merged %>%
+  select(-c(uqno))
+
+# bnlearn cannot handle characters
+df_merged2 <- df_merged2 %>%
+  mutate(gender = case_when(
+    gender == 'male' ~ 1,
+    gender == 'female' ~ 2,
+    TRUE ~ NA
+  ),
+  education = case_when(
+    education == 'primary_school' ~ 1,
+    education == 'high_school' ~ 2,
+    education == 'matric' ~ 3,
+    education == 'vocational_technical_training' ~ 4,
+    education == 'higher_education' ~ 5,
+    education == 'other' ~ 6,
+    education == 'unspecified' ~ 7,
+    TRUE ~ NA
+  ),
+  economic_activity = case_when(
+    economic_activity == 'permanent' ~ 1,
+    economic_activity == 'seasonal' ~ 2,
+    economic_activity == 'fixed_contract' ~ 3,
+    economic_activity == 'casual' ~ 4,
+    economic_activity == 'temporary' ~ 5,
+    economic_activity == 'unspecified' ~ 6,
+    TRUE ~ 6 # unspecified
+  ),
+  age_group = case_when(
+    age_group == 'young' ~ 1,
+    age_group == 'early_career' ~ 2,
+    age_group == 'late_career' ~ 3,
+    age_group == 'retired' ~ 4,
+    TRUE ~ NA
+  ),
+  type_crime_occur = case_when(
+    type_crime_occur == 'property_crime' ~ 1,
+    type_crime_occur == 'violent_crime' ~ 2,
+    type_crime_occur == 'other' ~ 4,
+    TRUE ~ 9 # none
+  ),
+  type_crime_afraid = case_when(
+    type_crime_afraid == 'property_crime' ~ 1,
+    type_crime_afraid == 'violent_crime' ~ 2,
+    type_crime_afraid == 'other' ~ 4,
+    TRUE ~ 9 # none
+  ),
+  fear_crime_prevent_actions = case_when(
+    fear_crime_prevent_actions == 'public_safety_concerns' ~ 1,
+    fear_crime_prevent_actions == 'personal_expression_freedom' ~ 2,
+    fear_crime_prevent_actions == 'livestock_concerns' ~ 3,
+    fear_crime_prevent_actions == 'livelihood_econ_activities' ~ 4,
+    fear_crime_prevent_actions == 'other' ~ 5,
+    TRUE ~ NA
+  ),
+  protection_measures_indiv = case_when(
+    protection_measures_indiv == 'private_security' ~ 1,
+    protection_measures_indiv == 'selfhelp_group' ~ 2,
+    protection_measures_indiv == 'weapon' ~ 3,
+    protection_measures_indiv == 'other' ~ 4,
+    TRUE ~ 9 # none
+  ),
+  protection_groups = case_when(
+    protection_groups == 'private_security' ~ 1,
+    protection_groups == 'neighbourhood_watch' ~ 2,
+    protection_groups == 'community_policing_forum' ~ 3,
+    protection_groups == 'religious_traditional_leaders' ~ 4,
+    protection_groups == 'other' ~ 5,
+    # TRUE ~ NA
+    TRUE ~ 9 # none
+  ),
+  access_instituitions = case_when(
+    access_instituitions == 'courts' ~ 1,
+    access_instituitions == 'medical' ~ 2,
+    access_instituitions == 'police' ~ 3,
+    access_instituitions == 'victim_empowerment' ~ 4,
+    access_instituitions == 'ngo_cbo' ~ 5,
+    access_instituitions == 'other' ~ 6,
+    TRUE ~ 9 # none
+  ),
+  crime_experienced = case_when(
+    crime_experienced == 'property_crime' ~ 1,
+    crime_experienced == 'violent_crime' ~ 2,
+    crime_experienced == 'other' ~ 3,
+    TRUE ~ 9 # none
+  ),
+  why_crime_commit = case_when(
+    why_crime_commit == 'cultural_societal_factors' ~ 1,
+    why_crime_commit == 'socioeconomic_factors' ~ 2,
+    why_crime_commit == 'group_dynamics_socialpolitical' ~ 3,
+    why_crime_commit == 'conflict_lawenforcement' ~ 4,
+    why_crime_commit == 'emotional_interpersonal' ~ 5,
+    why_crime_commit == 'other' ~ 6,
+    TRUE ~ NA
+  )
+  )
+
+df_merged2 <- df_merged2 %>%
+  mutate(walk_alone_dark = case_when(
+    walk_alone_dark == 1 ~ '1',
+    walk_alone_dark == 2 ~ '1',
+    walk_alone_dark == 3 ~ '2',
+    walk_alone_dark == 4 ~ '2',
+    TRUE ~ NA
+  ),
+  walk_alone_day = case_when(
+    walk_alone_day == 1 ~ '1',
+    walk_alone_day == 2 ~ '1',
+    walk_alone_day == 3 ~ '2',
+    walk_alone_day == 4 ~ '2',
+    TRUE ~ NA
+  )
+  )
+
+df_merged2_clean <- df_merged2[complete.cases(df_merged2),]
+
+df_merged2_clean <- df_merged2_clean %>%
+  filter(government_spending != 9) %>%
+  filter(spec_operations != 9) %>%
+  filter(police_visibility != 9) %>%
+  filter(police_mean_time != 9) %>%
+  filter(police_mean_time != 8) %>%
+  filter(level_violent_crime_changed != 9) %>%
+  filter(level_property_crime_changed != 9) %>%
+  filter(property_crime_committed_by != 9) %>%
+  filter(violent_crime_committed_by != 9) %>%
+  filter(walk_alone_day != 9) %>%
+  filter(walk_alone_dark != 9) %>%
+  filter(protect_groups_yn != 9) %>%
+  filter(satisfied_courts_perps != 9) %>%
+  filter(violent_crime_sentence != 9) %>%
+  filter(first_contact != 9) %>%
+  filter(medical_access_yn != 9) %>%
+  filter(counselling_access_yn != 9) %>%
+  filter(shelter_access_yn != 9) %>%
+  filter(shelter_nature != 9) %>%
+  filter(shelter_mean_time != 9) %>%
+  filter(satisfied_police != 9) %>%
+  filter(specop_reduce_crime != 9) %>%
+  filter(child_approach_police != 9) %>%
+  filter(trust_saps != 9) %>%
+  filter(trust_metro != 9) %>%
+  filter(nearest_court_yn != 9) %>%
+  filter(attend_court != 9) %>%
+  filter(prison != 9) %>%
+  filter(satisfied_rehab_criminals != 9) %>%
+  filter(report_corrupt_yn != 9) %>%
+  filter(corrupt_change != 9) %>%
+  filter(bribe_ask != 9)
+
+df_merged2_clean_factor <- data.frame(lapply(df_merged2_clean, factor))
+
+bn_network <- hc(df_merged2_clean_factor)
+
+library(visNetwork)
+plot_network <- function(structure, ht = '500px'){
+  
+  set.seed(13)
+  
+  nodes_unique <- unique(c(structure$arcs[,1], structure$arcs[,2]))
+  
+  nodes <- data.frame(id = nodes_unique,
+                      label = nodes_unique,
+                      color = 'darkturquoise',
+                      shadow = TRUE,
+                      font.size = 35,
+                      size = 40
+  )
+  edges <- data.frame(from = structure$arcs[,1],
+                      to = structure$arcs[,2],
+                      arrows = 'to',
+                      smooth = TRUE,
+                      shadow = TRUE,
+                      color = 'black')
+  return(visNetwork(nodes, edges, height = '2000px', width = '100%') %>%
+           visIgraphLayout())
+  
+  
+}
+
+plot_network(bn_network)
+
+
+#
+nb.fit <- bn.fit(bn_network, data = df_merged2_clean_factor)
+
+bn = nb.fit
+# compile Bayesian network into a junction tree representation
+bn_junction <- compile(as.grain(bn))
+################################################################################
+# CASE STUDY 1
+# given a particular crime is on the rise in a specific area
+
+evidence_set <- c("pr_code", "type_crime_occur", "spec_operations")
+evidence_states <- c("8", "1", "2")
+
+target_set <- c( "police_visibility", "police_response_time",
+                 "police_mean_time")
+################################################################################
+# most probable explanation
+evidence <- setEvidence(bn_junction,
+                        nodes = evidence_set, 
+                        states = evidence_states)
+joint_distribution <- querygrain(evidence,
+                                 nodes = target_set,
+                                 type = 'joint')
+
+# save to data.frame
+joint_distribution_df <- as.data.frame.table(joint_distribution)
+# arrange from highest to lowest
+joint_distribution_df <- joint_distribution_df %>%
+  arrange(desc(Freq))
+
+joint_distribution_df[1,]
+################################################################################
+insurance_full <- mre_brute(target_set = target_set, 
+                            evidence_set = evidence_set, 
+                            evidence_states = evidence_states, 
+                            bn_grain = bn_junction)
+
+insurance_fwd <- mre_fwd(target_set = target_set, 
+                         evidence_set = evidence_set, 
+                         evidence_states = evidence_states, 
+                         bn_grain = bn_junction)
+insurance_fwd
+bn_rho = 0.0001
+insurance_fwdglasso <- mre_fwd_glasso(target_set = target_set, 
+                                      evidence_set = evidence_set, 
+                                      evidence_states = evidence_states, 
+                                      bn_grain = bn_junction,
+                                      bn_rho = bn_rho,
+                                      score_scale = TRUE)
+insurance_fwdglasso
+
+################################################################################
+# CASE STUDY 2
+# given a particular victim profile, what factors make them more susceptible to crime
+
+evidence_set <- c("gender", "age_group", "education", "economic_activity",
+                  "satisfied_police", "level_violent_crime_changed", "trust_saps",
+                  "fear_crime_prevent_actions")
+
+evidence_states <- c("2", "3", "5", "3",
+                     "2", "1", "2",
+                     "1")
+
+target_set <- c("crime_experienced", "violent_crime_committed_by", 
+                "police_visibility", "police_response_time", "police_mean_time",
+                "protection_measures_indiv", "first_contact")
+
+################################################################################
+# most probable explanation
+evidence <- setEvidence(bn_junction,
+                        nodes = evidence_set, 
+                        states = evidence_states)
+joint_distribution <- querygrain(evidence,
+                                 nodes = target_set,
+                                 type = 'joint')
+
+# save to data.frame
+joint_distribution_df <- as.data.frame.table(joint_distribution)
+# arrange from highest to lowest
+joint_distribution_df <- joint_distribution_df %>%
+  arrange(desc(Freq))
+
+joint_distribution_df[1,]
+################################################################################
+insurance_full <- mre_brute(target_set = target_set, 
+                            evidence_set = evidence_set, 
+                            evidence_states = evidence_states, 
+                            bn_grain = bn_junction)
+
+insurance_fwd <- mre_fwd(target_set = target_set, 
+                         evidence_set = evidence_set, 
+                         evidence_states = evidence_states, 
+                         bn_grain = bn_junction)
+insurance_fwd
+bn_rho = 0.1
+insurance_fwdglasso <- mre_fwd_glasso(target_set = target_set, 
+                                      evidence_set = evidence_set, 
+                                      evidence_states = evidence_states, 
+                                      bn_grain = bn_junction,
+                                      bn_rho = bn_rho,
+                                      score_scale = TRUE)
+insurance_fwdglasso
+
+
+################################################################################
+# suppose we change the victim profile to understand how other groups perceive crime
+
+evidence_set <- c("gender", "age_group", "education", "economic_activity",
+                  "satisfied_police", "level_violent_crime_changed", "trust_saps",
+                  "fear_crime_prevent_actions")
+
+evidence_states <- c("1", "2", "3", "1",
+                     "2", "1", "2",
+                     "1")
+
+
+target_set <- c("crime_experienced", "violent_crime_committed_by", 
+                "police_visibility", "police_response_time", "police_mean_time",
+                "protection_measures_indiv", "first_contact")
+
+################################################################################
+################################################################################
+################################################################################
+# CASE STUDY 3 - SDP
+# we want to make a decision on trust in SAPS
+querygrain(bn_junction, nodes = 'trust_saps', type = 'joint')
+
+scenario <- setEvidence(bn_junction, 
+                        nodes = c('police_visibility', 'spec_operations', 'metro_code'),
+                        states = c('2', '2', '2'))
+querygrain(scenario, nodes = 'trust_saps', type = 'joint')
+
+# suppose we have hidden variables protection groups, access_instituitions, 
+states <- list(
+  satisfied_police = c("1", "2"),
+  satisfied_courts_perps = c("1", "2"),
+  violent_crime_sentence = c("1", "2"),
+  bribe_ask = c("1", "2")
+)
+
+combinations <- expand.grid(states)
+
+combinations$police_visibility <- '2'
+combinations$spec_operations <- '2'
+combinations$metro_code <- '2'
+
+evidence_scenarios <- combinations %>%
+  relocate(police_visibility, spec_operations, metro_code, .before = everything())
+
+evidence_scenarios2 <- asplit(evidence_scenarios, 1)
+
+result_df <- data.frame(police_visibility = character(), spec_operations = character(), metro_code = character(),
+                        satisfied_police = character(), 
+                        satisfied_courts_perps = character(),
+                        violent_crime_sentence = character(), 
+                        bribe_ask = character(),
+                        Probability_h = numeric(),
+                        Probability_D_Positive = numeric(),
+                        stringsAsFactors = FALSE)
+
+# query for Pr(h|e)
+e_1 <- setEvidence(bn_junction,
+                   nodes = c('police_visibility', 'spec_operations', 'metro_code'),
+                   states = c('2', '2', '2'))
+result_1 <- as.data.frame.table(querygrain(e_1,
+                                           nodes = c('satisfied_police', 
+                                                     'satisfied_courts_perps',
+                                                     'violent_crime_sentence',
+                                                     'bribe_ask'),
+                                           type = 'joint'))
+
+for (i in 1:nrow(evidence_scenarios)) {
+  # set evidence for current scenario
+  e_2 <- setEvidence(bn_junction,
+                     nodes = c('police_visibility', 'spec_operations', 'metro_code',
+                               'satisfied_police', 'satisfied_courts_perps',
+                               'violent_crime_sentence', 'bribe_ask'),
+                     states = as.character(evidence_scenarios2[[i]]))
+  # perform query Pr(d|e,h)
+  result_2 <- querygrain(e_2, nodes = c('trust_saps'), type = 'joint')
+  
+  # extract value for Pr(h|S2a)
+  result_1_sub  <- subset(result_1,
+                          satisfied_police == evidence_scenarios2[[i]][4] & 
+                            satisfied_courts_perps == evidence_scenarios2[[i]][5] &
+                            violent_crime_sentence == evidence_scenarios2[[i]][6] &
+                            bribe_ask == evidence_scenarios2[[i]][7]
+  )$Freq
+  
+  # combine into df: evidence scenario (variable instantiations), Pr(h|e), Pr(d|e,h) -- where D = +
+  result_df <- rbind(result_df, c(as.character(evidence_scenarios2[[i]]), result_1_sub, result_2['1']))
+  
+}
+
+colnames(result_df) <- c('police_visibility', 'spec_operations', 'metro_code',
+                         'satisfied_police', 'satisfied_courts_perps', 
+                         'violent_crime_sentence', 'bribe_ask',
+                         "Probability_h","Probability_D_Positive")
+
+# Set the threshold
+threshold <- 0.55 # Adjust the threshold as needed
+
+# Filter the data frame based on the threshold
+filtered_result <- subset(result_df, as.numeric(Probability_D_Positive) >= threshold)
+
+# Calculate the sum of the selected values
+sum_of_probabilities <- sum(as.numeric(filtered_result$Probability_h))
+
+# Print or use the sum_of_probabilities as needed
+print(sum_of_probabilities)
+
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+# suppose we observe satisfied_police
+scenario <- setEvidence(bn_junction, 
+                        nodes = c('police_visibility', 'spec_operations', 'metro_code',
+                                  'satisfied_police'),
+                        states = c('2', '2', '2', '1'))
+querygrain(scenario, nodes = 'trust_saps', type = 'joint')
+
+# suppose we have hidden variables protection groups, access_instituitions, 
+states <- list(
+  satisfied_courts_perps = c("1", "2"),
+  violent_crime_sentence = c("1", "2"),
+  bribe_ask = c("1", "2")
+)
+
+combinations <- expand.grid(states)
+
+combinations$police_visibility <- '2'
+combinations$spec_operations <- '2'
+combinations$metro_code <- '2'
+combinations$satisfied_police <- '1'
+
+evidence_scenarios <- combinations %>%
+  relocate(police_visibility, spec_operations, metro_code, satisfied_police, .before = everything())
+
+evidence_scenarios2 <- asplit(evidence_scenarios, 1)
+
+result_df <- data.frame(police_visibility = character(), spec_operations = character(), metro_code = character(),
+                        satisfied_police = character(), 
+                        satisfied_courts_perps = character(),
+                        violent_crime_sentence = character(), 
+                        bribe_ask = character(),
+                        Probability_h = numeric(),
+                        Probability_D_Positive = numeric(),
+                        stringsAsFactors = FALSE)
+
+# query for Pr(h|e)
+e_1 <- setEvidence(bn_junction,
+                   nodes = c('police_visibility', 'spec_operations', 'metro_code',
+                             'satisfied_police'),
+                   states = c('2', '2', '2', '1'))
+result_1 <- as.data.frame.table(querygrain(e_1,
+                                           nodes = c('satisfied_courts_perps',
+                                                     'violent_crime_sentence',
+                                                     'bribe_ask'),
+                                           type = 'joint'))
+
+for (i in 1:nrow(evidence_scenarios)) {
+  # set evidence for current scenario
+  e_2 <- setEvidence(bn_junction,
+                     nodes = c('police_visibility', 'spec_operations', 'metro_code',
+                               'satisfied_police', 'satisfied_courts_perps',
+                               'violent_crime_sentence', 'bribe_ask'),
+                     states = as.character(evidence_scenarios2[[i]]))
+  # perform query Pr(d|e,h)
+  result_2 <- querygrain(e_2, nodes = c('trust_saps'), type = 'joint')
+  
+  # extract value for Pr(h|S2a)
+  result_1_sub  <- subset(result_1,
+                          satisfied_courts_perps == evidence_scenarios2[[i]][5] &
+                            violent_crime_sentence == evidence_scenarios2[[i]][6] &
+                            bribe_ask == evidence_scenarios2[[i]][7]
+  )$Freq
+  
+  # combine into df: evidence scenario (variable instantiations), Pr(h|e), Pr(d|e,h) -- where D = +
+  result_df <- rbind(result_df, c(as.character(evidence_scenarios2[[i]]), result_1_sub, result_2['1']))
+  
+}
+
+colnames(result_df) <- c('police_visibility', 'spec_operations', 'metro_code',
+                         'satisfied_police', 'satisfied_courts_perps', 
+                         'violent_crime_sentence', 'bribe_ask',
+                         "Probability_h","Probability_D_Positive")
+
+# Set the threshold
+threshold <- 0.55 # Adjust the threshold as needed
+
+# Filter the data frame based on the threshold
+filtered_result <- subset(result_df, as.numeric(Probability_D_Positive) >= threshold)
+
+# Calculate the sum of the selected values
+sum_of_probabilities_11 <- sum(as.numeric(filtered_result$Probability_h))
+
+# Print or use the sum_of_probabilities as needed
+print(sum_of_probabilities_11)
+
+#####----------
+scenario <- setEvidence(bn_junction, 
+                        nodes = c('police_visibility', 'spec_operations', 'metro_code',
+                                  'satisfied_police'),
+                        states = c('2', '2', '2', '2'))
+querygrain(scenario, nodes = 'trust_saps', type = 'joint')
+
+# suppose we have hidden variables protection groups, access_instituitions, 
+states <- list(
+  satisfied_courts_perps = c("1", "2"),
+  violent_crime_sentence = c("1", "2"),
+  bribe_ask = c("1", "2")
+)
+
+combinations <- expand.grid(states)
+
+combinations$police_visibility <- '2'
+combinations$spec_operations <- '2'
+combinations$metro_code <- '2'
+combinations$satisfied_police <- '2'
+
+evidence_scenarios <- combinations %>%
+  relocate(police_visibility, spec_operations, metro_code, satisfied_police, .before = everything())
+
+evidence_scenarios2 <- asplit(evidence_scenarios, 1)
+
+result_df <- data.frame(police_visibility = character(), spec_operations = character(), metro_code = character(),
+                        satisfied_police = character(), 
+                        satisfied_courts_perps = character(),
+                        violent_crime_sentence = character(), 
+                        bribe_ask = character(),
+                        Probability_h = numeric(),
+                        Probability_D_Positive = numeric(),
+                        stringsAsFactors = FALSE)
+
+# query for Pr(h|e)
+e_1 <- setEvidence(bn_junction,
+                   nodes = c('police_visibility', 'spec_operations', 'metro_code',
+                             'satisfied_police'),
+                   states = c('2', '2', '2', '2'))
+result_1 <- as.data.frame.table(querygrain(e_1,
+                                           nodes = c('satisfied_courts_perps',
+                                                     'violent_crime_sentence',
+                                                     'bribe_ask'),
+                                           type = 'joint'))
+
+for (i in 1:nrow(evidence_scenarios)) {
+  # set evidence for current scenario
+  e_2 <- setEvidence(bn_junction,
+                     nodes = c('police_visibility', 'spec_operations', 'metro_code',
+                               'satisfied_police', 'satisfied_courts_perps',
+                               'violent_crime_sentence', 'bribe_ask'),
+                     states = as.character(evidence_scenarios2[[i]]))
+  # perform query Pr(d|e,h)
+  result_2 <- querygrain(e_2, nodes = c('trust_saps'), type = 'joint')
+  
+  # extract value for Pr(h|S2a)
+  result_1_sub  <- subset(result_1,
+                          satisfied_courts_perps == evidence_scenarios2[[i]][5] &
+                            violent_crime_sentence == evidence_scenarios2[[i]][6] &
+                            bribe_ask == evidence_scenarios2[[i]][7]
+  )$Freq
+  
+  # combine into df: evidence scenario (variable instantiations), Pr(h|e), Pr(d|e,h) -- where D = +
+  result_df <- rbind(result_df, c(as.character(evidence_scenarios2[[i]]), result_1_sub, result_2['1']))
+  
+}
+
+colnames(result_df) <- c('police_visibility', 'spec_operations', 'metro_code',
+                         'satisfied_police', 'satisfied_courts_perps', 
+                         'violent_crime_sentence', 'bribe_ask',
+                         "Probability_h","Probability_D_Positive")
+
+# Set the threshold
+threshold <- 0.55 # Adjust the threshold as needed
+
+# Filter the data frame based on the threshold
+filtered_result <- subset(result_df, as.numeric(Probability_D_Positive) >= threshold)
+
+# Calculate the sum of the selected values
+sum_of_probabilities_12 <- sum(as.numeric(filtered_result$Probability_h))
+
+# Print or use the sum_of_probabilities as needed
+print(sum_of_probabilities_12)
+print(1-sum_of_probabilities_12)
+
+################################################################################
+################################################################################
+# suppose we observe satisfied_courts_perps
+scenario <- setEvidence(bn_junction, 
+                        nodes = c('police_visibility', 'spec_operations', 'metro_code',
+                                  'satisfied_courts_perps'),
+                        states = c('2', '2', '2', '1'))
+querygrain(scenario, nodes = 'trust_saps', type = 'joint')
+
+# suppose we have hidden variables protection groups, access_instituitions, 
+states <- list(
+  satisfied_police = c("1", "2"),
+  violent_crime_sentence = c("1", "2"),
+  bribe_ask = c("1", "2")
+)
+
+combinations <- expand.grid(states)
+
+combinations$police_visibility <- '2'
+combinations$spec_operations <- '2'
+combinations$metro_code <- '2'
+combinations$satisfied_courts_perps <- '1'
+
+evidence_scenarios <- combinations %>%
+  relocate(police_visibility, spec_operations, metro_code, satisfied_courts_perps, .before = everything())
+
+evidence_scenarios2 <- asplit(evidence_scenarios, 1)
+
+result_df <- data.frame(police_visibility = character(), spec_operations = character(), metro_code = character(),
+                        satisfied_courts_perps = character(),
+                        satisfied_police = character(), 
+                        violent_crime_sentence = character(), 
+                        bribe_ask = character(),
+                        Probability_h = numeric(),
+                        Probability_D_Positive = numeric(),
+                        stringsAsFactors = FALSE)
+
+# query for Pr(h|e)
+e_1 <- setEvidence(bn_junction,
+                   nodes = c('police_visibility', 'spec_operations', 'metro_code', 'satisfied_courts_perps'),
+                   states = c('2', '2', '2', '1'))
+result_1 <- as.data.frame.table(querygrain(e_1,
+                                           nodes = c('satisfied_police', 
+                                                     'violent_crime_sentence',
+                                                     'bribe_ask'),
+                                           type = 'joint'))
+
+for (i in 1:nrow(evidence_scenarios)) {
+  # set evidence for current scenario
+  e_2 <- setEvidence(bn_junction,
+                     nodes = c('police_visibility', 'spec_operations', 'metro_code',
+                               'satisfied_courts_perps', 'satisfied_police', 
+                               'violent_crime_sentence', 'bribe_ask'),
+                     states = as.character(evidence_scenarios2[[i]]))
+  # perform query Pr(d|e,h)
+  result_2 <- querygrain(e_2, nodes = c('trust_saps'), type = 'joint')
+  
+  # extract value for Pr(h|S2a)
+  result_1_sub  <- subset(result_1,
+                          satisfied_police == evidence_scenarios2[[i]][5] & 
+                            violent_crime_sentence == evidence_scenarios2[[i]][6] &
+                            bribe_ask == evidence_scenarios2[[i]][7]
+  )$Freq
+  
+  # combine into df: evidence scenario (variable instantiations), Pr(h|e), Pr(d|e,h) -- where D = +
+  result_df <- rbind(result_df, c(as.character(evidence_scenarios2[[i]]), result_1_sub, result_2['1']))
+  
+}
+
+colnames(result_df) <- c('police_visibility', 'spec_operations', 'metro_code',
+                         'satisfied_courts_perps', 'satisfied_police',
+                         'violent_crime_sentence', 'bribe_ask',
+                         "Probability_h","Probability_D_Positive")
+
+# Set the threshold
+threshold <- 0.55 # Adjust the threshold as needed
+
+# Filter the data frame based on the threshold
+filtered_result <- subset(result_df, as.numeric(Probability_D_Positive) >= threshold)
+
+# Calculate the sum of the selected values
+sum_of_probabilities_21 <- sum(as.numeric(filtered_result$Probability_h))
+
+# Print or use the sum_of_probabilities as needed
+print(sum_of_probabilities_21)
+
+#####----------
+scenario <- setEvidence(bn_junction, 
+                        nodes = c('police_visibility', 'spec_operations', 'metro_code',
+                                  'satisfied_courts_perps'),
+                        states = c('2', '2', '2', '2'))
+querygrain(scenario, nodes = 'trust_saps', type = 'joint')
+
+# suppose we have hidden variables protection groups, access_instituitions, 
+states <- list(
+  satisfied_police = c("1", "2"),
+  violent_crime_sentence = c("1", "2"),
+  bribe_ask = c("1", "2")
+)
+
+combinations <- expand.grid(states)
+
+combinations$police_visibility <- '2'
+combinations$spec_operations <- '2'
+combinations$metro_code <- '2'
+combinations$satisfied_courts_perps <- '2'
+
+evidence_scenarios <- combinations %>%
+  relocate(police_visibility, spec_operations, metro_code, satisfied_courts_perps, .before = everything())
+
+evidence_scenarios2 <- asplit(evidence_scenarios, 1)
+
+result_df <- data.frame(police_visibility = character(), spec_operations = character(), metro_code = character(),
+                        satisfied_courts_perps = character(),
+                        satisfied_police = character(), 
+                        violent_crime_sentence = character(), 
+                        bribe_ask = character(),
+                        Probability_h = numeric(),
+                        Probability_D_Positive = numeric(),
+                        stringsAsFactors = FALSE)
+
+# query for Pr(h|e)
+e_1 <- setEvidence(bn_junction,
+                   nodes = c('police_visibility', 'spec_operations', 'metro_code', 'satisfied_courts_perps'),
+                   states = c('2', '2', '2', '2'))
+result_1 <- as.data.frame.table(querygrain(e_1,
+                                           nodes = c('satisfied_police', 
+                                                     'violent_crime_sentence',
+                                                     'bribe_ask'),
+                                           type = 'joint'))
+
+for (i in 1:nrow(evidence_scenarios)) {
+  # set evidence for current scenario
+  e_2 <- setEvidence(bn_junction,
+                     nodes = c('police_visibility', 'spec_operations', 'metro_code',
+                               'satisfied_courts_perps', 'satisfied_police', 
+                               'violent_crime_sentence', 'bribe_ask'),
+                     states = as.character(evidence_scenarios2[[i]]))
+  # perform query Pr(d|e,h)
+  result_2 <- querygrain(e_2, nodes = c('trust_saps'), type = 'joint')
+  
+  # extract value for Pr(h|S2a)
+  result_1_sub  <- subset(result_1,
+                          satisfied_police == evidence_scenarios2[[i]][5] & 
+                            violent_crime_sentence == evidence_scenarios2[[i]][6] &
+                            bribe_ask == evidence_scenarios2[[i]][7]
+  )$Freq
+  
+  # combine into df: evidence scenario (variable instantiations), Pr(h|e), Pr(d|e,h) -- where D = +
+  result_df <- rbind(result_df, c(as.character(evidence_scenarios2[[i]]), result_1_sub, result_2['1']))
+  
+}
+
+colnames(result_df) <- c('police_visibility', 'spec_operations', 'metro_code',
+                         'satisfied_courts_perps', 'satisfied_police',
+                         'violent_crime_sentence', 'bribe_ask',
+                         "Probability_h","Probability_D_Positive")
+
+# Set the threshold
+threshold <- 0.55 # Adjust the threshold as needed
+
+# Filter the data frame based on the threshold
+filtered_result <- subset(result_df, as.numeric(Probability_D_Positive) >= threshold)
+
+# Calculate the sum of the selected values
+sum_of_probabilities_22 <- sum(as.numeric(filtered_result$Probability_h))
+
+# Print or use the sum_of_probabilities as needed
+print(sum_of_probabilities_22)
+
+################################################################################
+################################################################################
+# suppose we observe violent_crime_sentence
+scenario <- setEvidence(bn_junction, 
+                        nodes = c('police_visibility', 'spec_operations', 'metro_code',
+                                  'violent_crime_sentence'),
+                        states = c('2', '2', '2', '1'))
+querygrain(scenario, nodes = 'trust_saps', type = 'joint')
+
+# suppose we have hidden variables protection groups, access_instituitions, 
+states <- list(
+  satisfied_police = c("1", "2"),
+  satisfied_courts_perps = c("1", "2"),
+  bribe_ask = c("1", "2")
+)
+
+combinations <- expand.grid(states)
+
+combinations$police_visibility <- '2'
+combinations$spec_operations <- '2'
+combinations$metro_code <- '2'
+combinations$violent_crime_sentence <- '1'
+
+evidence_scenarios <- combinations %>%
+  relocate(police_visibility, spec_operations, metro_code, violent_crime_sentence, .before = everything())
+
+evidence_scenarios2 <- asplit(evidence_scenarios, 1)
+
+result_df <- data.frame(police_visibility = character(), spec_operations = character(), metro_code = character(),
+                        violent_crime_sentence = character(), 
+                        satisfied_police = character(), 
+                        satisfied_courts_perps = character(),
+                        bribe_ask = character(),
+                        Probability_h = numeric(),
+                        Probability_D_Positive = numeric(),
+                        stringsAsFactors = FALSE)
+
+# query for Pr(h|e)
+e_1 <- setEvidence(bn_junction,
+                   nodes = c('police_visibility', 'spec_operations', 'metro_code', 'violent_crime_sentence'),
+                   states = c('2', '2', '2', '1'))
+result_1 <- as.data.frame.table(querygrain(e_1,
+                                           nodes = c('satisfied_police', 
+                                                     'satisfied_courts_perps',
+                                                     'bribe_ask'),
+                                           type = 'joint'))
+
+for (i in 1:nrow(evidence_scenarios)) {
+  # set evidence for current scenario
+  e_2 <- setEvidence(bn_junction,
+                     nodes = c('police_visibility', 'spec_operations', 'metro_code',
+                               'violent_crime_sentence',
+                               'satisfied_police', 'satisfied_courts_perps',
+                               'bribe_ask'),
+                     states = as.character(evidence_scenarios2[[i]]))
+  # perform query Pr(d|e,h)
+  result_2 <- querygrain(e_2, nodes = c('trust_saps'), type = 'joint')
+  
+  # extract value for Pr(h|S2a)
+  result_1_sub  <- subset(result_1,
+                          satisfied_police == evidence_scenarios2[[i]][5] & 
+                            satisfied_courts_perps == evidence_scenarios2[[i]][6] &
+                            bribe_ask == evidence_scenarios2[[i]][7]
+  )$Freq
+  
+  # combine into df: evidence scenario (variable instantiations), Pr(h|e), Pr(d|e,h) -- where D = +
+  result_df <- rbind(result_df, c(as.character(evidence_scenarios2[[i]]), result_1_sub, result_2['1']))
+  
+}
+
+colnames(result_df) <- c('police_visibility', 'spec_operations', 'metro_code',
+                         'violent_crime_sentence',
+                         'satisfied_police', 'satisfied_courts_perps', 
+                         'bribe_ask',
+                         "Probability_h","Probability_D_Positive")
+
+# Set the threshold
+threshold <- 0.55 # Adjust the threshold as needed
+
+# Filter the data frame based on the threshold
+filtered_result <- subset(result_df, as.numeric(Probability_D_Positive) >= threshold)
+
+# Calculate the sum of the selected values
+sum_of_probabilities_31 <- sum(as.numeric(filtered_result$Probability_h))
+
+# Print or use the sum_of_probabilities as needed
+print(sum_of_probabilities_31)
+
+#####----------
+scenario <- setEvidence(bn_junction, 
+                        nodes = c('police_visibility', 'spec_operations', 'metro_code',
+                                  'violent_crime_sentence'),
+                        states = c('2', '2', '2', '2'))
+querygrain(scenario, nodes = 'trust_saps', type = 'joint')
+
+# suppose we have hidden variables protection groups, access_instituitions, 
+states <- list(
+  satisfied_police = c("1", "2"),
+  satisfied_courts_perps = c("1", "2"),
+  bribe_ask = c("1", "2")
+)
+
+combinations <- expand.grid(states)
+
+combinations$police_visibility <- '2'
+combinations$spec_operations <- '2'
+combinations$metro_code <- '2'
+combinations$violent_crime_sentence <- '2'
+
+evidence_scenarios <- combinations %>%
+  relocate(police_visibility, spec_operations, metro_code, violent_crime_sentence, .before = everything())
+
+evidence_scenarios2 <- asplit(evidence_scenarios, 1)
+
+result_df <- data.frame(police_visibility = character(), spec_operations = character(), metro_code = character(),
+                        violent_crime_sentence = character(), 
+                        satisfied_police = character(), 
+                        satisfied_courts_perps = character(),
+                        bribe_ask = character(),
+                        Probability_h = numeric(),
+                        Probability_D_Positive = numeric(),
+                        stringsAsFactors = FALSE)
+
+# query for Pr(h|e)
+e_1 <- setEvidence(bn_junction,
+                   nodes = c('police_visibility', 'spec_operations', 'metro_code', 'violent_crime_sentence'),
+                   states = c('2', '2', '2', '2'))
+result_1 <- as.data.frame.table(querygrain(e_1,
+                                           nodes = c('satisfied_police', 
+                                                     'satisfied_courts_perps',
+                                                     'bribe_ask'),
+                                           type = 'joint'))
+
+for (i in 1:nrow(evidence_scenarios)) {
+  # set evidence for current scenario
+  e_2 <- setEvidence(bn_junction,
+                     nodes = c('police_visibility', 'spec_operations', 'metro_code',
+                               'violent_crime_sentence',
+                               'satisfied_police', 'satisfied_courts_perps',
+                               'bribe_ask'),
+                     states = as.character(evidence_scenarios2[[i]]))
+  # perform query Pr(d|e,h)
+  result_2 <- querygrain(e_2, nodes = c('trust_saps'), type = 'joint')
+  
+  # extract value for Pr(h|S2a)
+  result_1_sub  <- subset(result_1,
+                          satisfied_police == evidence_scenarios2[[i]][5] & 
+                            satisfied_courts_perps == evidence_scenarios2[[i]][6] &
+                            bribe_ask == evidence_scenarios2[[i]][7]
+  )$Freq
+  
+  # combine into df: evidence scenario (variable instantiations), Pr(h|e), Pr(d|e,h) -- where D = +
+  result_df <- rbind(result_df, c(as.character(evidence_scenarios2[[i]]), result_1_sub, result_2['1']))
+  
+}
+
+colnames(result_df) <- c('police_visibility', 'spec_operations', 'metro_code',
+                         'violent_crime_sentence',
+                         'satisfied_police', 'satisfied_courts_perps', 
+                         'bribe_ask',
+                         "Probability_h","Probability_D_Positive")
+
+# Set the threshold
+threshold <- 0.55 # Adjust the threshold as needed
+
+# Filter the data frame based on the threshold
+filtered_result <- subset(result_df, as.numeric(Probability_D_Positive) >= threshold)
+
+# Calculate the sum of the selected values
+sum_of_probabilities_32 <- sum(as.numeric(filtered_result$Probability_h))
+
+# Print or use the sum_of_probabilities as needed
+print(sum_of_probabilities_32)
+print(1-sum_of_probabilities_32)
+
+################################################################################
+################################################################################
+# suppose we observe bribe_ask
+scenario <- setEvidence(bn_junction, 
+                        nodes = c('police_visibility', 'spec_operations', 'metro_code', 'bribe_ask'),
+                        states = c('2', '2', '2', '1'))
+querygrain(scenario, nodes = 'trust_saps', type = 'joint')
+
+# suppose we have hidden variables protection groups, access_instituitions, 
+states <- list(
+  satisfied_police = c("1", "2"),
+  satisfied_courts_perps = c("1", "2"),
+  violent_crime_sentence = c("1", "2")
+)
+
+combinations <- expand.grid(states)
+
+combinations$police_visibility <- '2'
+combinations$spec_operations <- '2'
+combinations$metro_code <- '2'
+combinations$bribe_ask <- '1'
+
+evidence_scenarios <- combinations %>%
+  relocate(police_visibility, spec_operations, metro_code, .before = everything())
+
+evidence_scenarios2 <- asplit(evidence_scenarios, 1)
+
+result_df <- data.frame(police_visibility = character(), spec_operations = character(), metro_code = character(),
+                        bribe_ask = character(),
+                        satisfied_police = character(), 
+                        satisfied_courts_perps = character(),
+                        violent_crime_sentence = character(),
+                        Probability_h = numeric(),
+                        Probability_D_Positive = numeric(),
+                        stringsAsFactors = FALSE)
+
+# query for Pr(h|e)
+e_1 <- setEvidence(bn_junction,
+                   nodes = c('police_visibility', 'spec_operations', 'metro_code', 'bribe_ask'),
+                   states = c('2', '2', '2', '1'))
+result_1 <- as.data.frame.table(querygrain(e_1,
+                                           nodes = c('satisfied_police', 
+                                                     'satisfied_courts_perps',
+                                                     'violent_crime_sentence'),
+                                           type = 'joint'))
+
+for (i in 1:nrow(evidence_scenarios)) {
+  # set evidence for current scenario
+  e_2 <- setEvidence(bn_junction,
+                     nodes = c('police_visibility', 'spec_operations', 'metro_code',
+                               'bribe_ask',
+                               'satisfied_police', 'satisfied_courts_perps',
+                               'violent_crime_sentence'),
+                     states = as.character(evidence_scenarios2[[i]]))
+  # perform query Pr(d|e,h)
+  result_2 <- querygrain(e_2, nodes = c('trust_saps'), type = 'joint')
+  
+  # extract value for Pr(h|S2a)
+  result_1_sub  <- subset(result_1,
+                          satisfied_police == evidence_scenarios2[[i]][5] & 
+                            satisfied_courts_perps == evidence_scenarios2[[i]][6] &
+                            violent_crime_sentence == evidence_scenarios2[[i]][7]
+  )$Freq
+  
+  # combine into df: evidence scenario (variable instantiations), Pr(h|e), Pr(d|e,h) -- where D = +
+  result_df <- rbind(result_df, c(as.character(evidence_scenarios2[[i]]), result_1_sub, result_2['1']))
+  
+}
+
+colnames(result_df) <- c('police_visibility', 'spec_operations', 'metro_code',
+                         'bribe_ask',
+                         'satisfied_police', 'satisfied_courts_perps', 
+                         'violent_crime_sentence', 
+                         "Probability_h","Probability_D_Positive")
+
+# Set the threshold
+threshold <- 0.55 # Adjust the threshold as needed
+
+# Filter the data frame based on the threshold
+filtered_result <- subset(result_df, as.numeric(Probability_D_Positive) >= threshold)
+
+# Calculate the sum of the selected values
+sum_of_probabilities_41 <- sum(as.numeric(filtered_result$Probability_h))
+
+# Print or use the sum_of_probabilities as needed
+print(sum_of_probabilities_41)
+
+#####----------
+scenario <- setEvidence(bn_junction, 
+                        nodes = c('police_visibility', 'spec_operations', 'metro_code', 'bribe_ask'),
+                        states = c('2', '2', '2', '2'))
+querygrain(scenario, nodes = 'trust_saps', type = 'joint')
+
+# suppose we have hidden variables protection groups, access_instituitions, 
+states <- list(
+  satisfied_police = c("1", "2"),
+  satisfied_courts_perps = c("1", "2"),
+  violent_crime_sentence = c("1", "2")
+)
+
+combinations <- expand.grid(states)
+
+combinations$police_visibility <- '2'
+combinations$spec_operations <- '2'
+combinations$metro_code <- '2'
+combinations$bribe_ask <- '2'
+
+evidence_scenarios <- combinations %>%
+  relocate(police_visibility, spec_operations, metro_code, .before = everything())
+
+evidence_scenarios2 <- asplit(evidence_scenarios, 1)
+
+result_df <- data.frame(police_visibility = character(), spec_operations = character(), metro_code = character(),
+                        bribe_ask = character(),
+                        satisfied_police = character(), 
+                        satisfied_courts_perps = character(),
+                        violent_crime_sentence = character(),
+                        Probability_h = numeric(),
+                        Probability_D_Positive = numeric(),
+                        stringsAsFactors = FALSE)
+
+# query for Pr(h|e)
+e_1 <- setEvidence(bn_junction,
+                   nodes = c('police_visibility', 'spec_operations', 'metro_code', 'bribe_ask'),
+                   states = c('2', '2', '2', '2'))
+result_1 <- as.data.frame.table(querygrain(e_1,
+                                           nodes = c('satisfied_police', 
+                                                     'satisfied_courts_perps',
+                                                     'violent_crime_sentence'),
+                                           type = 'joint'))
+
+for (i in 1:nrow(evidence_scenarios)) {
+  # set evidence for current scenario
+  e_2 <- setEvidence(bn_junction,
+                     nodes = c('police_visibility', 'spec_operations', 'metro_code',
+                               'bribe_ask',
+                               'satisfied_police', 'satisfied_courts_perps',
+                               'violent_crime_sentence'),
+                     states = as.character(evidence_scenarios2[[i]]))
+  # perform query Pr(d|e,h)
+  result_2 <- querygrain(e_2, nodes = c('trust_saps'), type = 'joint')
+  
+  # extract value for Pr(h|S2a)
+  result_1_sub  <- subset(result_1,
+                          satisfied_police == evidence_scenarios2[[i]][5] & 
+                            satisfied_courts_perps == evidence_scenarios2[[i]][6] &
+                            violent_crime_sentence == evidence_scenarios2[[i]][7]
+  )$Freq
+  
+  # combine into df: evidence scenario (variable instantiations), Pr(h|e), Pr(d|e,h) -- where D = +
+  result_df <- rbind(result_df, c(as.character(evidence_scenarios2[[i]]), result_1_sub, result_2['1']))
+  
+}
+
+colnames(result_df) <- c('police_visibility', 'spec_operations', 'metro_code',
+                         'bribe_ask',
+                         'satisfied_police', 'satisfied_courts_perps', 
+                         'violent_crime_sentence', 
+                         "Probability_h","Probability_D_Positive")
+
+# Set the threshold
+threshold <- 0.55 # Adjust the threshold as needed
+
+# Filter the data frame based on the threshold
+filtered_result <- subset(result_df, as.numeric(Probability_D_Positive) >= threshold)
+
+# Calculate the sum of the selected values
+sum_of_probabilities_42 <- sum(as.numeric(filtered_result$Probability_h))
+
+# Print or use the sum_of_probabilities as needed
+print(sum_of_probabilities_42)
+
+################################################################################
+# Pr(g|e)
+
+scenario_g <- setEvidence(bn_junction, 
+                          nodes = c('police_visibility', 
+                                    'spec_operations',
+                                    'metro_code'),
+                          states = c('2', '2', '2'))
+
+querygrain(scenario_g, nodes = 'satisfied_police', type = 'joint')
+#(1*0.406111) + (0.8852122*0.593889) = 0.9318288
+querygrain(scenario_g, nodes = 'satisfied_courts_perps', type = 'joint')
+#(0.7972658*0.114084) + (0.43269*0.885916) = 0.4742823
+querygrain(scenario_g, nodes = 'violent_crime_sentence', type = 'joint')
+#(1*0.1298613) + (0.6041769*0.8701387) = 0.655579
+querygrain(scenario_g, nodes = 'bribe_ask', type = 'joint')
+#(0.1950586*0.04531281) + (0.6885629*0.95468719) = 0.6662008
+
+# SDP: 0.4742823
+# 0.9318288 - 0.4742823 = 0.4575465 - satisfied_police
+# 0.4742823 - 0.4742823 = 0 - satisfied_courts_perps
+# 0.655579 - 0.4742823 = 0.1812967 - violent_crime_sentence
+# 0.6662008 - 0.4742823 = 0.1919185 - bribe_ask
+################################################################################
+################################################################################
+################################################################################
