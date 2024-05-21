@@ -1,6 +1,7 @@
 library(bnlearn)
 library(gRain)
-
+# devtools::install_github('iEna101/XBN')
+# library(XBN)
 ################################################################################
 # INSURANCE
 
