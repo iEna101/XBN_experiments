@@ -1,0 +1,47 @@
+library(bnlearn)
+library(gRain)
+
+################################################################################
+# INSURANCE
+
+data("insurance")
+# description of variables: https://www.bnlearn.com/documentation/man/insurance.html
+
+# learn structure from data
+network <- hc(insurance)
+#
+nb.fit <- bn.fit(network, data = insurance)
+
+bn = nb.fit
+
+# compile Bayesian network into a junction tree representation
+bn_junction <- compile(as.grain(bn))
+
+################################################################################
+# scenario 1
+evidence_set <- c("Accident", "RuggedAuto")
+evidence_states <- c("Mild", "Tank") 
+
+target_set <- c("Antilock", "OtherCar", "Airbag")
+
+scenario1 <- mre_fwd_glasso(target_set = target_set,
+                            evidence_set = evidence_set,
+                            evidence_states = evidence_states,
+                            bn_grain = bn_junction,
+                            bn_rho = 0.2,
+                            score_scale = TRUE)
+scenario1
+################################################################################
+# scenario 2
+evidence_set <- c("Age", "SocioEcon", "HomeBase", "DrivHist", "Accident")
+evidence_states <- c("Adult", "Middle", "Rural", "Zero", "Moderate") 
+
+target_set <- c("Antilock", "Airbag", "VehicleYear", "MakeModel", "RuggedAuto")
+scenario2 <- mre_fwd_glasso(target_set = target_set,
+                            evidence_set = evidence_set,
+                            evidence_states = evidence_states,
+                            bn_grain = bn_junction,
+                            bn_rho = 0.2,
+                            score_scale = TRUE)
+
+scenario2
