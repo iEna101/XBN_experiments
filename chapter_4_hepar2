@@ -1,0 +1,250 @@
+
+# Load packages
+library(readr) # required to load the data
+library(bnlearn) # required to construct Bayesian network (BN)
+library(visNetwork) # required to plot the BN
+library(gRain) # used for compiling the BN into a junction tree representation
+library(dplyr) # required for semi_join
+library(tidyr)
+library(glassoFast) # required to run glasso
+library(glasso)
+library(plyr)
+library(stringi) # string manipulation
+library(stringr)
+library(RMThreshold)
+library(gtools)
+library(Matrix)
+
+
+hepar2 <- readRDS("C:/Users/inderks/Downloads/hepar2 (1).rds")
+bn = hepar2
+
+################################################################################
+# compile Bayesian network into a junction tree representation
+bn_junction <- compile(as.grain(hepar2))
+
+################################################################################
+
+sort_columns <- function(df) {
+  df[, order(names(df))]
+}
+
+# set.seed(42)
+set.seed(13)
+
+# Generate 1000 test cases
+test_cases <- rbn(bn, n = 100000)
+
+# define target variables -- from literature
+target_set <-  c("PBC", "RHepatitis", "THepatitis", "Steatosis", "ChHepatitis",
+                 "Cirrhosis", "Hyperbilirubinemia") 
+
+# define evidence variables
+evidence_set <- setdiff(colnames(test_cases), target_set)
+
+# Keep only unique test cases -- based on evidence
+unique_samples <- unique(test_cases[, evidence_set])
+num_unique_samples <- nrow(unique_samples)
+print(num_unique_samples)
+
+sampled_test_cases <- unique_samples[sample(1:nrow(unique_samples), 200, replace = FALSE), ]
+
+rm(test_cases)
+rm(unique_samples)
+
+num_test_cases <- 1
+matching_status <- vector("logical", length = num_test_cases)
+
+num_correct_fwd <- 0
+num_correct_fwd_glasso_01 <- 0
+num_correct_fwd_glasso_001 <- 0
+num_correct_fwd_glasso_0001 <- 0
+
+# add timers to check average time
+total_time_base <- 0
+total_time_fwd <- 0
+total_time_fwd_glasso_01 <- 0
+total_time_fwd_glasso_001 <- 0
+total_time_fwd_glasso_0001 <- 0
+
+# count total number of neighbours
+fwd_num_neighbours_total <- 0
+fwd_glasso_01_num_neighbours_total <- 0
+fwd_glasso_001_num_neighbours_total <- 0
+fwd_glasso_0001_num_neighbours_total <- 0
+
+# loop through all test_cases to see if solved exactly
+for (i in 1:num_test_cases) {
+  
+  ##############################
+  print(i)
+  
+  evidence_i <- sampled_test_cases[i, evidence_set]
+  evidence_states <- as.character(unlist(evidence_i[1, ]))
+  
+  start_time_baseline <- Sys.time()
+  mre_baseline_test <- mre_brute(target_set = target_set, 
+                                evidence_set = evidence_set,
+                                evidence_states = evidence_states,
+                                bn_grain = bn_junction)
+  
+  
+  mre_baseline_best <- sort_columns(mre_baseline_test[1, ])
+  end_time_baseline <- Sys.time()
+  elapsed_baseline <- end_time_baseline - start_time_baseline
+  total_time_base <- total_time_base + elapsed_baseline
+  print("baseline")
+  print(elapsed_baseline)
+  
+  rm(mre_baseline_test)
+  
+  ###
+  
+  start_time_fwd <- Sys.time()
+  mre_fwd_test <- mre_fwd(target_set = target_set, 
+                          evidence_set = evidence_set,
+                          evidence_states = evidence_states,
+                          bn_grain = bn_junction)
+  
+  fwd_num_neighbours <- mre_fwd_test[[2]]
+  fwd_num_neighbours_total <- fwd_num_neighbours_total + fwd_num_neighbours
+  mre_fwd_test <- mre_fwd_test[[1]]
+  mre_fwd_best <- sort_columns(mre_fwd_test[1, ])
+  
+  end_time_fwd <- Sys.time()
+  elapsed_fwd <- end_time_fwd - start_time_fwd
+  total_time_fwd <- total_time_fwd + elapsed_fwd
+  print("fwd")
+  print(elapsed_fwd)
+  
+  rm(mre_fwd_test)
+  
+  ##
+  start_time_fwd_glasso_01 <- Sys.time()
+  mre_fwd_glasso_test_01 <- mre_fwd_glasso(target_set = target_set, 
+                                           evidence_set = evidence_set,
+                                           evidence_states = evidence_states,
+                                           bn_grain = bn_junction,
+                                           bn_rho = 0.01,
+                                           score_scale = TRUE)
+  
+  fwd_glasso_01_num_neighbours <- mre_fwd_glasso_test_01[[2]]
+  fwd_glasso_01_num_neighbours_total <- fwd_glasso_01_num_neighbours_total + fwd_glasso_01_num_neighbours
+  mre_fwd_glasso_test_01 <- mre_fwd_glasso_test_01[[1]]
+  mre_fwd_glasso_best_01 <- sort_columns(mre_fwd_glasso_test_01[1, ])
+  
+  end_time_fwd_glasso_01 <- Sys.time()
+  elapsed_fwd_glasso_01 <- end_time_fwd_glasso_01 - start_time_fwd_glasso_01
+  total_time_fwd_glasso_01 <- total_time_fwd_glasso_01 + elapsed_fwd_glasso_01
+  print("glasso01")
+  print(elapsed_fwd_glasso_01)
+  
+  rm(mre_fwd_glasso_test_01)
+  
+  ##
+  start_time_fwd_glasso_001 <- Sys.time()
+  mre_fwd_glasso_test_001 <- mre_fwd_glasso(target_set = target_set, 
+                                            evidence_set = evidence_set,
+                                            evidence_states = evidence_states,
+                                            bn_grain = bn_junction,
+                                            bn_rho = 0.001,
+                                            score_scale = TRUE)
+  
+  fwd_glasso_001_num_neighbours <- mre_fwd_glasso_test_001[[2]]
+  fwd_glasso_001_num_neighbours_total <- fwd_glasso_001_num_neighbours_total + fwd_glasso_001_num_neighbours
+  mre_fwd_glasso_test_001 <- mre_fwd_glasso_test_001[[1]]
+  mre_fwd_glasso_best_001 <- sort_columns(mre_fwd_glasso_test_001[1, ])
+  
+  end_time_fwd_glasso_001 <- Sys.time()
+  elapsed_fwd_glasso_001 <- end_time_fwd_glasso_001 - start_time_fwd_glasso_001
+  total_time_fwd_glasso_001 <- total_time_fwd_glasso_001 + elapsed_fwd_glasso_001
+  print("glasso001")
+  print(elapsed_fwd_glasso_001)
+  
+  rm(mre_fwd_glasso_test_001)
+  
+  ##
+  start_time_fwd_glasso_0001 <- Sys.time()
+  mre_fwd_glasso_test_0001 <- mre_fwd_glasso(target_set = target_set, 
+                                             evidence_set = evidence_set,
+                                             evidence_states = evidence_states,
+                                             bn_grain = bn_junction,
+                                             bn_rho = 0.0001,
+                                             score_scale = TRUE)
+  
+  fwd_glasso_0001_num_neighbours <- mre_fwd_glasso_test_0001[[2]]
+  fwd_glasso_0001_num_neighbours_total <- fwd_glasso_0001_num_neighbours_total + fwd_glasso_0001_num_neighbours
+  mre_fwd_glasso_test_0001 <- mre_fwd_glasso_test_0001[[1]]
+  mre_fwd_glasso_best_0001 <- sort_columns(mre_fwd_glasso_test_0001[1, ])
+  
+  end_time_fwd_glasso_0001 <- Sys.time()
+  elapsed_fwd_glasso_0001 <- end_time_fwd_glasso_0001 - start_time_fwd_glasso_0001
+  total_time_fwd_glasso_0001 <- total_time_fwd_glasso_0001 + elapsed_fwd_glasso_0001
+  print("glasso0001")
+  print(elapsed_fwd_glasso_0001)
+  ##
+  
+  rm(mre_fwd_glasso_test_0001)
+  
+  if (identical(mre_baseline_best, mre_fwd_best)) {
+    num_correct_fwd <- num_correct_fwd + 1
+    matching_status[i] <- TRUE
+  } else {
+    matching_status[i] <- FALSE
+  }
+  
+  if (identical(mre_baseline_best, mre_fwd_glasso_best_01)) {
+    num_correct_fwd_glasso_01 <- num_correct_fwd_glasso_01 + 1
+    matching_status[i] <- TRUE
+  } else {
+    matching_status[i] <- FALSE
+  }
+  
+  ##
+  if (identical(mre_baseline_best, mre_fwd_glasso_best_001)) {
+    num_correct_fwd_glasso_001 <- num_correct_fwd_glasso_001 + 1
+    matching_status[i] <- TRUE
+  } else {
+    matching_status[i] <- FALSE
+  }
+  ##
+  if (identical(mre_baseline_best, mre_fwd_glasso_best_0001)) {
+    num_correct_fwd_glasso_0001 <- num_correct_fwd_glasso_0001 + 1
+    matching_status[i] <- TRUE
+  } else {
+    matching_status[i] <- FALSE
+  }
+  
+  
+  print(num_correct_fwd)
+  print(num_correct_fwd_glasso_01)
+  print(num_correct_fwd_glasso_001)
+  print(num_correct_fwd_glasso_0001)
+  
+}
+
+print(paste("Number of Test Cases Solved Exactly by Forward:", num_correct_fwd))
+print(paste("Number of Test Cases Solved Exactly by Forward-gLasso (0.01):", num_correct_fwd_glasso_01))
+print(paste("Number of Test Cases Solved Exactly by Forward-gLasso (0.001):", num_correct_fwd_glasso_001))
+print(paste("Number of Test Cases Solved Exactly by Forward-gLasso (0.0001):", num_correct_fwd_glasso_0001))
+
+average_time_fwd <- total_time_fwd / num_test_cases
+average_time_fwd_glasso_01 <- total_time_fwd_glasso_01 / num_test_cases
+average_time_fwd_glasso_001 <- total_time_fwd_glasso_001 / num_test_cases
+average_time_fwd_glasso_0001 <- total_time_fwd_glasso_0001 / num_test_cases
+
+print(average_time_fwd)
+print(average_time_fwd_glasso_01)
+print(average_time_fwd_glasso_001)
+print(average_time_fwd_glasso_0001)
+
+average_num_neighbours_fwd <- fwd_num_neighbours_total / num_test_cases
+average_num_neighbours_fwd_glasso_01 <- fwd_glasso_01_num_neighbours_total / num_test_cases
+average_num_neighbours_fwd_glasso_001 <- fwd_glasso_001_num_neighbours_total / num_test_cases
+average_num_neighbours_fwd_glasso_0001 <- fwd_glasso_0001_num_neighbours_total / num_test_cases
+
+print(average_num_neighbours_fwd)
+print(average_num_neighbours_fwd_glasso_01)
+print(average_num_neighbours_fwd_glasso_001)
+print(average_num_neighbours_fwd_glasso_0001)
+
