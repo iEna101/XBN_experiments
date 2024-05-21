@@ -39,49 +39,16 @@ set.seed(13)
 # Generate 1000 test cases
 test_cases <- rbn(bn, n = 100000)
 
-# Randomly sample test cases from the simulated data
-# unique_samples <- unique(test_cases)
-# num_unique_samples <- nrow(unique_samples)
-# 
-# rm(test_cases)
-
-# define target variables
-# 5 targets
-# target_set <- c("RuggedAuto", "MakeModel", "Antilock", "Airbag", "VehicleYear")
-# target_set <- c("RuggedAuto", "MakeModel", "Antilock", "CarValue", "VehicleYear")
-# 6 targets
 target_set <- c("RuggedAuto", "MakeModel", "Antilock", "Airbag", "VehicleYear",
                 "CarValue")
 
-# 7 targets
-# target_set <- c("RuggedAuto", "MakeModel", "Antilock", "Airbag", "VehicleYear",
-#                 "CarValue", "ThisCarDam")
-# ThisCarCost
-# ThisCarDam gives interesting results
 # define evidence variables
 # 5 observations
 evidence_set <- c("Accident", "Age", "SocioEcon", "HomeBase", "DrivHist")
-# 6 observations
-# evidence_set <- c("Accident", "Age", "SocioEcon", "SeniorTrain", "HomeBase", "DrivHist")
 
-#### JUST DO THIS
-# Keep only unique test cases -- based on evidence
 unique_samples <- unique(test_cases[, evidence_set])
 num_unique_samples <- nrow(unique_samples)
 print(num_unique_samples)
-# 
-# # keep only unique evidence cases
-# filtered_data <- unique_samples %>%
-#   group_by_at(vars(all_of(evidence_set))) %>%
-#   # filter(n() == 1) %>%
-#   distinct(across(c("Accident", "Age", "SocioEcon", "SeniorTrain"))) %>%
-#   ungroup()
-# 
-# filtered_df <- unique_samples %>%
-#   group_by(across(c("Accident", "Age", "SocioEcon", "SeniorTrain", "HomeBase"))) %>% 
-#   filter(n() > 1)
-# 
-# filtered_df <- unique(filtered_df[,evidence_set])
 
 sampled_test_cases <- unique_samples[sample(1:nrow(unique_samples), 200, replace = FALSE), ]
 
