@@ -3,6 +3,9 @@ library(haven)
 library(tidyverse)
 library(bnlearn)
 
+# devtools::install_github('iEna101/XBN')
+# library(XBN)
+
 vcs_2017_2018_hhold_v1 <- read_csv("~/remove_later/data/vcs-2017-2018-v1.1-csv/vcs-2017-2018-v1.1-csv/vcs-2017-2018-hhold-v1.csv")
 
 
