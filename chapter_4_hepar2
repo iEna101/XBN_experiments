@@ -52,7 +52,7 @@ sampled_test_cases <- unique_samples[sample(1:nrow(unique_samples), 200, replace
 rm(test_cases)
 rm(unique_samples)
 
-num_test_cases <- 1
+num_test_cases <- 200
 matching_status <- vector("logical", length = num_test_cases)
 
 num_correct_fwd <- 0
