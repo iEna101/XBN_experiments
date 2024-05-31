@@ -1,6 +1,6 @@
 devtools::install_github('iEna101/XBN')
 library(XBN)
-
+library(bnlearn)
 ################################################################################
 # ASIA
 asia <- readRDS("~/remove_later/thesis_code/asia.rds")
