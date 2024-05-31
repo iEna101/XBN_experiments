@@ -1,5 +1,5 @@
 # XBN_experiments
-This repository contains scripts for all experiments conducted in the thesis titled Explainable Bayesian networks: taxonomy, properties and approximation methods. This scripts requires the user to install the XBN package also developed in this thesis. The R package can be installed using devtools::install_github('iEna101/XBN')
+This repository contains scripts for all experiments conducted in the thesis titled Explainable Bayesian networks: taxonomy, properties and approximation methods. This scripts requires the user to install the XBN package also developed in this thesis. The R package can be installed using devtools::install_github('iEna101/XBN') and can be accessed at https://github.com/iEna101/XBN
 
 This work is submitted in partial fulfilment of the requirements of the degree PhD (Mathematical Statistics) in the Faculty of Economic and Management Sciences, University of Pretoria.
 
